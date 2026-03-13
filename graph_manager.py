@@ -1,7 +1,5 @@
 import asyncio
 import logging
-import json
-import re
 from typing import Dict, Any, TypedDict, Literal, List
 
 from langgraph.graph import StateGraph, END
@@ -30,6 +28,7 @@ class ScoutState(TypedDict):
 
 async def summarizer_node(state: ScoutState) -> ScoutState:
     logger.info("Node: Summarizer | Analyzing pitch deck...")
+    # Extract summary from the raw PDF text
     summary = await sumarizer(state["raw_deck_text"])
     state["startup"].manager_notes = summary
     return state
@@ -39,23 +38,15 @@ async def primary_research_node(state: ScoutState) -> ScoutState:
     logger.info(f"Node: Primary Research | Attempt: {retries + 1}")
 
     if retries > 0:
-        await asyncio.sleep(5)
+        await asyncio.sleep(2) # Backoff
 
-    # 1. Get raw response from researcher
-    # We expect researcher_agent to now return a Pydantic object or a clean Dict
     try:
-        updated_startup = await researcher_agent(state["startup"].manager_notes)
-        
-        # 2. If researcher_agent returns a Dict, validate it into our StartupState
-        if isinstance(updated_startup, dict):
-            state["startup"] = StartupState(**updated_startup)
-        else:
-            state["startup"] = updated_startup
-            
-        logger.info(f"✅ Structured Data Validated for {state['startup'].company_name}")
+        # researcher_agent now returns a fully hydrated StartupState object
+        state["startup"] = await researcher_agent(state["startup"].manager_notes)
+        logger.info(f"✅ Research complete for: {state['startup'].company_name}")
         
     except Exception as e:
-        logger.error(f"Structured Parsing Failed: {e}")
+        logger.error(f"Researcher Node Failed: {e}")
         state["retry_stats"]["researcher"] = retries + 1
         
     return state
@@ -63,13 +54,8 @@ async def primary_research_node(state: ScoutState) -> ScoutState:
 async def analyst_node(state: ScoutState) -> ScoutState:
     logger.info("Node: Financial Analyst | Processing unit economics...")
     try:
-        updated_startup = await analyst_agent(state["startup"])
-        
-        # Ensure boolean fields are actually booleans to stop the Pydantic warning
-        if isinstance(updated_startup.is_public, str):
-            updated_startup.is_public = updated_startup.is_public.lower() == 'true'
-            
-        state["startup"] = updated_startup
+        # analyst_agent now handles its own internal validation and returns StartupState
+        state["startup"] = await analyst_agent(state["startup"])
         return state
     except Exception as e:
         logger.error(f"Analyst Node Failure: {e}")
@@ -79,43 +65,25 @@ async def critic_node(state: ScoutState) -> ScoutState:
     mode = state["metadata"].get("mode", "normal")
     logger.info(f"Node: Critic | Reviewing in {mode.upper()} mode...")
     
-    # Run the agent
-    verdict_text = await critic_agent(state["startup"], mode)
+    # Run the agent - critic_agent now returns the updated StartupState object
+    state["startup"] = await critic_agent(state["startup"], mode)
     
-    # 1. Update the verdict text immediately
-    state["startup"].critic_verdict = verdict_text
-    
-    # 2. Robust Score Extraction (Looking for ANY number associated with score)
-    # This searches for "Score: 85", "85/100", or "Score is 85"
-    score_match = re.search(r"(?:score[:\s*]*|(\d+)/100)(\d+\.?\d*)", verdict_text, re.IGNORECASE)
-    
-    if score_match:
-        # Extract the numeric group
-        extracted_score = float(score_match.group(1) or score_match.group(2))
-        state["startup"].investment_score = extracted_score
-        logger.info(f"Successfully extracted score: {extracted_score}")
-    else:
-        # Emergency Fallback: If no score found, don't leave it at 0.0
-        # Check if Analyst had a score first
-        if state["startup"].investment_score == 0:
-            state["startup"].investment_score = 50.0 # Neutral baseline
-            logger.warning("No score found in Critic verdict. Setting neutral baseline.")
-            
+    logger.info(f"✅ Final Review Complete. Score: {state['startup'].investment_score}")
     return state
+
 # --- 🚦 ROUTER ---
 
 def validate_research_quality(state: ScoutState) -> Literal["analyst", "researcher", "__end__"]:
     s = state["startup"]
     retries = state["retry_stats"].get("researcher", 0)
 
-    # Big company validation logic
-    if (not s.company_name or s.total_funding == 0) and retries < 2:
-        logger.warning("⚠️ Validation Failed: Missing core data. Retrying...")
-        state["retry_stats"]["researcher"] = retries + 1
+    # If the researcher failed to even find a company name, we retry
+    if (s.company_name == "Pending" or not s.company_name) and retries < 2:
+        logger.warning("⚠️ Validation Failed: Missing core identity. Retrying...")
         return "researcher"
     
-    if not s.company_name and retries >= 2:
-        logger.error("❌ Critical data missing after max retries.")
+    if s.company_name == "Pending" and retries >= 2:
+        logger.error("❌ Critical data missing after max retries. Terminating.")
         return "__end__"
 
     return "analyst"
@@ -152,25 +120,23 @@ def build_elite_scout_graph():
 
 async def main_orchestrator():
     print("\n" + "═"*60)
-    print("🚀 AI-SCOUT 2026 : ENTERPRISE GRAPH ORCHESTRATOR")
+    print("🚀 THE STARTUP SCOUT v2.0 : GRAPH ORCHESTRATOR")
     print("═"*60)
     
-    # --- RESTORED INPUT LOGIC ---
-    print("[1] Normal Standard Due Diligence (Balanced)")
-    print("[2] Hard Stress-Test (High-Skepticism)")
+    print("[1] Balanced Due Diligence (Pragmatic)")
+    print("[2] Hard Stress-Test (Brutal Skeptic)")
     vibe_choice = input("Select Execution Mode: ")
     critic_vibe = "hard" if vibe_choice == "2" else "normal"
     
-    print(f"\n📂 Initializing pipeline in {critic_vibe.upper()} mode...")
-    
-    # Trigger extraction
+    # 1. Extraction Phase
+    print("\n📂 Reading Pitch Deck...")
     deck_text = await text_extractor() 
     
     if not deck_text:
-        logger.error("No text extracted. Shutting down.")
+        logger.error("Extraction failed. Ensure deck.pdf is in the directory.")
         return
 
-    # Pass choice into metadata
+    # 2. State Initialization
     initial_state: ScoutState = {
         "startup": StartupState(company_name="Pending"),
         "raw_deck_text": deck_text,
@@ -179,20 +145,21 @@ async def main_orchestrator():
         "error_log": []
     }
 
+    # 3. Graph Execution
     engine = build_elite_scout_graph()
-    
-    logger.info("Invoking Graph Engine...")
+    logger.info("Initializing Agent Squad...")
     final_output = await engine.ainvoke(initial_state)
     
     res = final_output["startup"]
     
-    # Final Visual Output
-    print("\n" + "═"*60)
+    # 4. Final Result Presentation
+    print("\n" + "█"*60)
     print(f"📊 FINAL INVESTMENT DOSSIER: {res.company_name.upper()}")
-    print("═"*60)
-    print(f"🎯 SCORE: {res.investment_score}/100")
-    print(f"🧐 CRITIC'S SUMMARY: {res.critic_verdict}...")
-    print("═"*60 + "\n")
+    print(f"💰 FUNDING: ${res.total_funding:,.0f} | 📈 VALUATION: ${res.latest_valuation:,.0f}")
+    print(f"⏳ RUNWAY: {res.runway_months} months | 🔥 SCORE: {res.investment_score}/100")
+    print("█"*60)
+    print(f"\n🧐 CRITIC VERDICT:\n{res.critic_verdict}")
+    print("\n" + "═"*60)
 
 if __name__ == "__main__":
-    asyncio.run(main_orchestrator())
+    asyncio.run(main_orchestrator()) 

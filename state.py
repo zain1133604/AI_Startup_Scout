@@ -1,11 +1,10 @@
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 from typing import List, Optional, Dict, Union
 import re
-from typing import Dict, List
 
 def parse_financial_string(val: Union[str, float, int]) -> float:
     """Converts strings like '46.1M' or '2B' into actual floats."""
-    if val is None: return 0.0
+    if val is None or val == "": return 0.0
     if isinstance(val, (float, int)): return float(val)
     
     clean_val = str(val).replace('$', '').replace(',', '').strip().upper()
@@ -41,15 +40,14 @@ class Citation(BaseModel):
     source_url: str
     fact: str
 
-
 class StartupState(BaseModel):
     """The Single Source of Truth for the entire Scout Squad."""
     
     company_name: str
-    industry: str = "Unknown"
+    industry: Optional[str] = "Unknown"
     website: Optional[Union[HttpUrl, str]] = None 
     summary: str = ""
-    is_public: bool = Field(default=False)
+    is_public: bool = False
     ticker: Optional[str] = None
     
     founders: List[Founder] = []
@@ -83,7 +81,6 @@ class StartupState(BaseModel):
     open_roles: int = 0
 
     sources: Dict[str, str] = {}
-    industry: Optional[str] = "Unknown"
 
     community_sentiment: str = "Mixed"
     vibe_score: float = 5.0
@@ -91,49 +88,20 @@ class StartupState(BaseModel):
     reddit_signal: str = "No data"
     investment_score: float = 0.0
 
-    @model_validator(mode='after')
-    def extract_from_notes(self) -> 'StartupState':
-        text = self.manager_notes
-        
-        # Regex to capture numbers/suffixes
-        def get_val(key):
-            match = re.search(f"{key}:\\s*([\\$0-9\\.KMB]+)", text, re.I)
-            return match.group(1) if match else None
+    # --- 🛡️ IMPROVED VALIDATORS ---
 
-        # NEW: Helper to capture text status (like Aggressive/Freeze)
-        def get_text_val(key):
-            match = re.search(f"{key}:\\s*([a-zA-Z]+)", text, re.I)
-            return match.group(1).strip() if match else None
+    @field_validator('is_public', mode='before')
+    @classmethod
+    def force_bool(cls, v):
+        if isinstance(v, str):
+            return v.lower() in ("yes", "true", "t", "1")
+        return bool(v)
 
-        # --- EXISTING FINANCIAL FIXES ---
-        raw_fund = get_val("total_funding")
-        if raw_fund: self.total_funding = parse_financial_string(raw_fund)
+    @field_validator('total_funding', 'latest_valuation', 'annual_revenue', mode='before')
+    @classmethod
+    def validate_financials(cls, v):
+        return parse_financial_string(v)
 
-        raw_val = get_val("latest_valuation")
-        if raw_val: self.latest_valuation = parse_financial_string(raw_val)
-
-        raw_rev = get_val("annual_revenue")
-        if raw_rev: self.annual_revenue = parse_financial_string(raw_rev)
-        
-        # --- NEW: HIRING PULSE FIXES ---
-        self.hiring_status = get_text_val("hiring_status") or "Unknown"
-
-        raw_roles = get_val("open_roles")
-        if raw_roles:
-            try:
-                # We convert to float first in case the LLM returns "24.0"
-                self.open_roles = int(float(raw_roles))
-            except:
-                self.open_roles = 0
-
-        # --- EXISTING HEADCOUNT FIX ---
-        if self.headcount == 0:
-            hc_match = re.search(r"(?:headcount|employees|people):\s*(\d+)", text, re.I)
-            if hc_match: 
-                self.headcount = int(hc_match.group(1))
-
-        return self
-    # --- 🛡️ EXISTING VALIDATORS ---
     @field_validator('founders', mode='before')
     @classmethod
     def fix_founder_list(cls, v):
@@ -150,4 +118,5 @@ class StartupState(BaseModel):
 
     class Config:
         arbitrary_types_allowed = True
-  
+        # This helps if Gemini sends extra keys we didn't define
+        extra = "ignore"

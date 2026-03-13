@@ -5,6 +5,8 @@ import os
 from state import StartupState, parse_financial_string
 import sys
 import asyncio
+import re
+import json
 load_dotenv()
 gemini_key = os.environ.get("GEMINI_KEY")
 
@@ -94,36 +96,41 @@ async def researcher_agent(missing_info_list):
         - **Secondary Search:** Search `"{found_name} [Industry] reviews" OR "{found_name} [Industry] scam"`.
         - **Verification:** If the search results describe a product that does NOT match the startup's purpose (e.g. you find a music app but the target is a dating app), DISCARD THEM.
 
+### 🛑 CRITICAL DATA SCHEMA (ANALYST COMPATIBILITY V4.0):
+        You MUST format these specific data points as a list of OBJECTS in Section VII. 
+        1. Founders (Objects): {{ "name": "Full Name", "role": "CEO", "bio": "...", "linkedin": "..." }}
+        2. Competitors (Objects): {{ "name": "...", "description": "...", "threat_level": "High/Med/Low" }}
+        3. Funding History (Objects): {{ "round_name": "Series A", "amount": 25.0, "date": "April 2025" }}
+
+### 🛑 CRITICAL DATA SCHEMA (ANALYST COMPATIBILITY V4.0):
+        You MUST format these specific data points as a list of OBJECTS in Section VII. 
+        1. Founders (Objects): {{ "name": "Full Name", "role": "CEO", "bio": "...", "linkedin": "..." }}
+        2. Competitors (Objects): {{ "name": "...", "description": "...", "threat_level": "High/Med/Low" }}
+        3. Funding History (Objects): {{ "round_name": "Series A", "amount": 25.0, "date": "April 2025" }}
+
         ### 🧱 VII. RAW DATA BLOCK (FOR SYSTEM PARSING)
-        --- START RAW DATA ---
-        company_name: {found_name}
-        industry: [Identify Industry]
-        is_public: [True/False]
-        
-        total_funding: [Float, e.g. 46.1]
-        funding_source: https://x.com/search_found
-        
-        latest_valuation: [If not found, estimate 4x the total funding. e.g. 40.0]
-        valuation_source: https://x.com/search_found
-        
-        annual_revenue: [Float, e.g. 7.0]
-        revenue_source: https://x.com/search_found
-        
-        headcount: [Integer, e.g. 88]
-        headcount_source: https://x.com/search_found
-        
-        hiring_status: [Aggressive/Maintain/Freeze]
-        open_roles: [Integer, e.g. 24]
-        cac: [Float, e.g. 5000.0]
-        payback_period: [Float, e.g. 2.6]
-
-        community_sentiment: [Positive/Neutral/negative]
-        top_complaint: [Most common bug or user complaint found on Reddit]
-        vibe_score: [Float 1.0 to 10.0 based on community mood]
-        reddit_signal: [One sentence summary of Reddit threads]
-        --- END RAW DATA ---
-
-        *MANDATORY: Section VII is for the Python backend. Use ONLY numbers. If data is not found, use 0.0.*
+        You MUST provide the final data as a single JSON code block. 
+        Ensure the keys match these exactly:
+        {{
+            "company_name": string,
+            "industry": string,
+            "is_public": boolean,
+            "total_funding": float,
+            "latest_valuation": float,
+            "annual_revenue": float,
+            "headcount": integer,
+            "hiring_status": "Aggressive" | "Maintain" | "Freeze",
+            "open_roles": integer,
+            "vibe_score": float,
+            "community_sentiment": string,
+            "sources": {{
+                "total_funding": "url",
+                "latest_valuation": "url",
+                "annual_revenue": "url",
+                "headcount": "url"
+            }}
+        }}
+        MANDATORY: Return ONLY the JSON inside the code block for this section. Use 0.0 for missing numbers.
         
 
         NOTE: If you find multiple sources, use the most recent or reliable one (e.g., Crunchbase, Reuters, or Official Company Site).
@@ -166,55 +173,32 @@ async def researcher_agent(missing_info_list):
         manager_notes=content 
     )
 
-    # 3. FILL THE HOUSE (Parsing Logic)
+# 3. FILL THE HOUSE (New JSON-Based Parsing Logic)
     try:
-        if "--- START RAW DATA ---" in content and "--- END RAW DATA ---" in content:
-            raw_section = content.split("--- START RAW DATA ---")[1].split("--- END RAW DATA ---")[0]
+        # Extract JSON from Markdown block
+        json_match = re.search(r"```json\n(.*?)\n```", content, re.DOTALL)
+        if not json_match:
+            # Fallback: check if it sent JSON without backticks
+            json_match = re.search(r"(\{.*?\})", content, re.DOTALL)
 
-            # List of keys that MUST be strings
-            string_keys = [
-                "community_sentiment", "top_complaint", "reddit_signal", 
-                "company_name", "industry", "hiring_status", "is_public"
-            ]
+        if json_match:
+            raw_json = json_match.group(1)
+            data = json.loads(raw_json)
 
-            for line in raw_section.strip().split("\n"):
-                if ":" in line:
-                    parts = line.split(":", 1)
-                    # Clean the key: remove bullets, spaces, and make lowercase
-                    key = parts[0].replace("*", "").strip().lower() 
-                    value = parts[1].strip()
-                    
-                    # A. Capture Source URLs
-                    if key.endswith("_source"):
-                        field_name = key.replace("_source", "")
-                        state.sources[field_name] = value 
-                    
-                    # B. Handle Strings
-                    elif key in string_keys:
-                        setattr(state, key, str(value))
+            # Use Pydantic to validate and update the state
+            # This replaces the entire "for line in raw_section" loop
+            state = StartupState.model_validate({**state.model_dump(), **data})
+            
+            # Map sources specifically if they are in the nested JSON
+            if "sources" in data:
+                state.sources.update(data["sources"])
 
-                    # C. Handle Vibe Score Specifically (The Fix)
-                    elif key == "vibe_score":
-                        # Only take the first part if Gemini writes "7.5/10"
-                        clean_val = "".join(c for c in value.split('/')[0] if c.isdigit() or c == '.')
-                        if clean_val:
-                            state.vibe_score = float(clean_val)
-
-                    # D. Handle Other Numeric Data
-                    elif hasattr(state, key):
-                        clean_val = "".join(c for c in value if c.isdigit() or c == '.')
-                        if clean_val:
-                            try:
-                                val = float(clean_val) if "." in clean_val else int(clean_val)
-                                setattr(state, key, val)
-                            except:
-                                pass
-            print(f"✅ Researcher found {len(state.sources)} source links and vibe metrics.")
+            print(f"✅ Structured Data Validated for {state.company_name}")
         else:
-            print("⚠️ RAW DATA BLOCK not found in Gemini response!")
+            print("⚠️ JSON block not found! Fallback to raw text summary.")
 
     except Exception as e:
-        print(f"⚠️ Parsing Error: {e}")
+        print(f"⚠️ Structured Parsing Error: {e}. Falling back to manual assignment.")
 
     # 4. SHIP THE HOUSE (Make sure you are returning the 'state' object itself)
     return state

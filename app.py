@@ -6,6 +6,7 @@ import asyncio
 import io
 import contextlib
 from manager import run_scout_squad 
+import sys
 
 # --- CONFIG ---
 st.set_page_config(page_title="AI-Scout 2026", layout="wide", page_icon="🛰️")
@@ -15,11 +16,11 @@ UPLOAD_DIR = "uploads"
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
 
-# --- HELPER FUNCTIONS (FIXED) ---
+# --- HELPER FUNCTIONS ---
 def load_data():
     if os.path.exists(REGISTRY_PATH):
         try:
-            with open(REGISTRY_PATH, "r", encoding="utf-8") as f:
+            with open(REGISTRY_PATH, "r") as f:
                 return json.load(f)
         except:
             return []
@@ -27,20 +28,17 @@ def load_data():
 
 def save_to_registry(new_entry):
     registry = load_data()
-    # Replace old entry if same file name, else append
-    registry = [item for item in registry if item.get('file_name') != new_entry['file_name']]
+    # Check if we already have this entry to avoid double-saves
+    registry = [item for item in registry if item['file_name'] != new_entry['file_name']]
     registry.append(new_entry)
-    
-    with open(REGISTRY_PATH, "w", encoding="utf-8") as f:
-        # FIXED: Added 'f' as the second argument (the file pointer)
-        json.dump(registry, f, indent=4)
+    with open(REGISTRY_PATH, "w") as f:
+        json.dump(registry, indent=4)
 
 def delete_from_registry(file_name):
     registry = load_data()
-    registry = [item for item in registry if item.get('file_name') != file_name]
-    with open(REGISTRY_PATH, "w", encoding="utf-8") as f:
-        # FIXED: Added 'f' here too
-        json.dump(registry, f, indent=4)
+    registry = [item for item in registry if item['file_name'] != file_name]
+    with open(REGISTRY_PATH, "w") as f:
+        json.dump(registry, indent=4)
 
 # --- UI HEADER ---
 st.title("🛰️ AI-Scout: Venture Intelligence")
