@@ -1,134 +1,240 @@
-import streamlit as st
-import pandas as pd
-import json
 import os
 import asyncio
-import io
-import contextlib
-from manager import run_scout_squad 
-import sys
+import gradio as gr
+import nest_asyncio
 
-# --- CONFIG ---
-st.set_page_config(page_title="AI-Scout 2026", layout="wide", page_icon="🛰️")
-REGISTRY_PATH = "scout_registry.json"
-UPLOAD_DIR = "uploads" 
+from graph_manager import (
+    ScoutState,
+    summarizer_node,
+    primary_research_node,
+    analyst_node,
+    critic_node,
+)
 
-if not os.path.exists(UPLOAD_DIR):
-    os.makedirs(UPLOAD_DIR)
+from state import StartupState
+from textextractor import LlamaParse
+from langgraph.graph import StateGraph, END
 
-# --- HELPER FUNCTIONS ---
-def load_data():
-    if os.path.exists(REGISTRY_PATH):
-        try:
-            with open(REGISTRY_PATH, "r") as f:
-                return json.load(f)
-        except:
-            return []
-    return []
+nest_asyncio.apply()
 
-def save_to_registry(new_entry):
-    registry = load_data()
-    # Check if we already have this entry to avoid double-saves
-    registry = [item for item in registry if item['file_name'] != new_entry['file_name']]
-    registry.append(new_entry)
-    with open(REGISTRY_PATH, "w") as f:
-        json.dump(registry, indent=4)
+# ---------------------------------------------------
+# CSS
+# ---------------------------------------------------
 
-def delete_from_registry(file_name):
-    registry = load_data()
-    registry = [item for item in registry if item['file_name'] != file_name]
-    with open(REGISTRY_PATH, "w") as f:
-        json.dump(registry, indent=4)
+css = """
+body{
+background:#0b0f14;
+}
 
-# --- UI HEADER ---
-st.title("🛰️ AI-Scout: Venture Intelligence")
-st.write("Monitor agent terminal output directly in the dashboard.")
+.gradio-container{
+background:#0b0f14 !important;
+}
 
-# --- SIDEBAR: UPLOAD & PROCESS ---
-with st.sidebar:
-    st.header("📥 Upload Center")
-    uploaded_file = st.file_uploader("Drag and drop PDF", type="pdf")
+.panel{
+background:#111827;
+border-radius:12px;
+padding:18px;
+border:1px solid #1f2937;
+}
+
+#terminal textarea{
+background:#020617 !important;
+color:#00ff9c !important;
+font-family:monospace !important;
+}
+
+#deploy-btn{
+background:linear-gradient(90deg,#16a34a,#22c55e) !important;
+border:none !important;
+font-weight:600;
+}
+
+.header-title{
+font-size:28px;
+font-weight:700;
+color:white;
+}
+
+.header-sub{
+color:#9ca3af;
+}
+"""
+
+# ---------------------------------------------------
+# CORE PIPELINE
+# ---------------------------------------------------
+
+async def run_autonomous_squad(pdf_file, mode, gemini_key):
+
+    if pdf_file is None:
+        return "### ❌ STATUS: SOURCE_MISSING", "[ERROR] No PDF uploaded."
     
-    analysis_mode = st.selectbox(
-        "⚖️ Analysis Strategy",
-        options=["Normal Standard", "Hard Stress-Test"]
-    )
-    mode_value = 1 if "Normal" in analysis_mode else 2
-    
-    if st.button("🚀 Process Startup", use_container_width=True):
-        if uploaded_file:
-            save_path = os.path.join(UPLOAD_DIR, uploaded_file.name)
-            with open(save_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            
-            # 1. Setup the Capture Buffer
-            output_capture = io.StringIO()
-            
-            try:
-                with st.spinner(f"🕵️ Agents active... Reading terminal stream..."):
-                    # 2. REDIRECT: Everything printed in manager.py goes to output_capture
-                    with contextlib.redirect_stdout(output_capture):
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        # We call it, knowing it returns nothing
-                        loop.run_until_complete(run_scout_squad(save_path, mode_value)) 
-                
-                # 3. Capture the full text block from the terminal
-                full_terminal_output = output_capture.getvalue()
-                
-                # 4. Save to Registry (Since manager returns nothing, we save the logs as the primary data)
-                new_data = {
-                    "company": uploaded_file.name.replace(".pdf", "").title(),
-                    "logs": full_terminal_output,
-                    "mode": analysis_mode,
-                    "file_name": uploaded_file.name,
-                    "status": "✅ Complete"
-                }
-                save_to_registry(new_data)
-                
-                st.success(f"✅ Mission Complete for {uploaded_file.name}!")
-                st.rerun()
-                
-            except Exception as e:
-                st.error(f"❌ Error during processing: {e}")
-        else:
-            st.error("Please upload a PDF file first!")
+    if not gemini_key:
+        return "### ❌ STATUS: AUTH_REQUIRED", "[ERROR] User Gemini API Key is required."
 
-# --- MAIN: THE STREAMING LOGS ---
-st.subheader("🏆 Processed Startups")
-data = load_data()
+    log = []
+    log.append("[SYSTEM] Initializing pipeline")
 
-if data:
-    # We display a simple list of processed files
-    df = pd.DataFrame(data)
-    st.dataframe(df[["company", "mode", "status"]], use_container_width=True, hide_index=True)
+    # Injecting keys into Environment
+    # Private keys must be set in Hugging Face Settings -> Secrets
+    os.environ["GEMINI_API_KEY"] = gemini_key
+    os.environ["LLAMA_PARSE_KEY"] = os.getenv("LLAMA_PARSE_KEY", "")
+    os.environ["GROQ_API_KEY"] = os.getenv("GROQ_API_KEY", "")
+    os.environ["TAVILY_API_KEY"] = os.getenv("TAVILY_API_KEY", "")
 
-    st.divider()
-    
-    # Selection for viewing the "Terminal Mirror"
-    selected_file = st.selectbox("🔍 Select Startup to View Terminal Dossier", df["company"].tolist())
-    
-    if selected_file:
-        startup_detail = next(item for item in data if item["company"] == selected_file)
-        
-        col_text, col_del = st.columns([4, 1])
-        with col_text:
-            st.markdown(f"### 🖥️ Terminal Output: {selected_file}")
-        with col_del:
-            if st.button("🗑️ Delete Data"):
-                delete_from_registry(startup_detail["file_name"])
-                st.rerun()
+    try:
+        file_path = pdf_file.name if hasattr(pdf_file, "name") else pdf_file
 
-        # THE BIG WOW: Displaying the terminal output in a code box
-        # This keeps the formatting (spacing/dashes) exactly like the terminal
-        st.code(startup_detail["logs"], language="text")
-        
-        # Download button for the text dossier
-        st.download_button(
-            label="📂 Download Full Terminal Report",
-            data=startup_detail["logs"],
-            file_name=f"{selected_file}_dossier.txt",
-            mime="text/plain"
+        log.append("[EXTRACTOR] Starting LlamaParse with System Secret")
+
+        parser = LlamaParse(
+            api_key=os.environ["LLAMA_PARSE_KEY"],
+            result_type="markdown",
         )
-else:
-    st.info("No startups analyzed yet. Use the sidebar to upload your first deck!")
+
+        documents = await parser.aload_data(file_path)
+        raw_text = documents[0].text
+
+        log.append(f"[DATA] Extracted {len(raw_text)} characters")
+
+        # -----------------------
+        # BUILD GRAPH
+        # -----------------------
+
+        log.append("[SQUAD] Building agent graph")
+
+        workflow = StateGraph(ScoutState)
+
+        workflow.add_node("summarizer", summarizer_node)
+        workflow.add_node("researcher", primary_research_node)
+        workflow.add_node("analyst", analyst_node)
+        workflow.add_node("critic", critic_node)
+
+        workflow.set_entry_point("summarizer")
+
+        workflow.add_edge("summarizer", "researcher")
+        workflow.add_edge("researcher", "analyst")
+        workflow.add_edge("analyst", "critic")
+        workflow.add_edge("critic", END)
+
+        graph = workflow.compile()
+
+        log.append("[SQUAD] Agents analyzing startup")
+
+        initial_state = {
+            "startup": StartupState(company_name="IDENTIFYING"),
+            "raw_deck_text": raw_text,
+            "metadata": {"mode": mode.lower()},
+            "retry_stats": {},
+            "error_log": [],
+        }
+
+        final_state = await graph.ainvoke(initial_state)
+
+        startup = final_state["startup"]
+
+        log.append(f"[SUCCESS] Analysis complete for {startup.company_name}")
+
+        report = f"""
+# 📊 Startup Intelligence Report
+
+## {startup.company_name}
+
+{startup.critic_verdict}
+
+---
+
+### Manager Notes
+
+{startup.manager_notes}
+"""
+
+        return report, "\n".join(log)
+
+    except Exception as e:
+        log.append(f"[CRITICAL] {str(e)}")
+        return "### ⚠️ SYSTEM FAILURE", "\n".join(log)
+
+
+# ---------------------------------------------------
+# UI
+# ---------------------------------------------------
+
+with gr.Blocks(css=css, theme=gr.themes.Base()) as demo:
+
+    gr.Markdown(
+        """
+<div class="header-title">🛰️ AI-Scout Command Center</div>
+<div class="header-sub">Autonomous Startup Intelligence System</div>
+"""
+    )
+
+    with gr.Row():
+
+        # LEFT PANEL
+        with gr.Column(scale=1):
+
+            with gr.Group(elem_classes="panel"):
+
+                gr.Markdown("### 📂 Configuration")
+
+                gemini_input = gr.Textbox(
+                    label="User Gemini API Key",
+                    placeholder="Enter your AIza... key",
+                    type="password"
+                )
+
+                pdf_input = gr.File(
+                    label="Upload Pitch Deck",
+                    file_types=[".pdf"],
+                    file_count="single",
+                )
+
+                mode_input = gr.Radio(
+                    ["Normal", "Hard"],
+                    value="Normal",
+                    label="Analysis Mode",
+                )
+
+                run_btn = gr.Button(
+                    "🚀 Deploy Scout",
+                    elem_id="deploy-btn",
+                )
+
+        # RIGHT PANEL
+        with gr.Column(scale=2):
+
+            with gr.Group(elem_classes="panel"):
+
+                gr.Markdown("### 📊 Analysis Output")
+
+                output_report = gr.Markdown(
+                    "Awaiting deployment..."
+                )
+
+            with gr.Group(elem_classes="panel"):
+
+                gr.Markdown("### 🖥 System Monitor")
+
+                status_terminal = gr.Textbox(
+                    lines=12,
+                    interactive=False,
+                    elem_id="terminal",
+                )
+
+    run_btn.click(
+        fn=run_autonomous_squad,
+        inputs=[pdf_input, mode_input, gemini_input],
+        outputs=[output_report, status_terminal],
+    )
+
+
+# ---------------------------------------------------
+# LAUNCH
+# ---------------------------------------------------
+
+if __name__ == "__main__":
+    demo.launch(
+        server_name="0.0.0.0",
+        server_port=7860
+    )

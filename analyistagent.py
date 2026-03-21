@@ -6,130 +6,150 @@ from state import StartupState
 async def analyst_agent(state: StartupState):
     print("📊 Analyst Agent is calculating financial metrics...")
 
-    # Best practice: Load API key from env
-    api_key = os.environ.get("GROQ_KEY", "")
+    api_key = os.environ.get("GROK_KEY")
     client = AsyncGroq(api_key=api_key)
 
     max_retries = 3
     attempt = 0
     feedback = ""
-    reflection_history = []
 
-    # System prompt optimized for extraction and structured output
     extraction_prompt = f"""
-    You are a financial data extraction agent for a Venture Capital firm.
-    Your job is to extract raw numeric data from the dossier provided.
-
-    Rules:
-    - Return ONLY a valid JSON object.
-    - If a value is unknown, use 0.
-    - Do NOT perform math; just extract.
-
-    ### ⚠️ SENTIMENT ADJUSTMENT CONTEXT:
-    Current Community Vibe: {state.community_sentiment}
-    Vibe Score: {state.vibe_score}/10
-    Top Complaint: {state.top_complaint}
+    You are a Senior VC Financial Auditor. Extract numeric data AND qualitative signals.
+    ### TARGET SIGNALS:
+    1. Founder backgrounds (Ex-FAANG, Ivy League, Serial Founder, YC).
+    2. Market/Moat (High-threat competitors, Patents, proprietary tech).
+    Return ONLY a valid JSON object.
     """
 
     while attempt < max_retries:
         try:
             print(f"🔁 Analyst attempt {attempt + 1}")
-
             response = await client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
+                temperature=0, # FIX 1: Set to 0 here too for stable data extraction
                 messages=[
                     {"role": "system", "content": extraction_prompt},
-                    {
-                        "role": "user",
-                        "content": f"Extract data from this dossier: {state.manager_notes}\n\nFeedback: {feedback}"
-                    }
+                    {"role": "user", "content": f"Extract data from this dossier: {state.manager_notes}\n\nFeedback: {feedback}"}
                 ],
                 response_format={"type": "json_object"}
             )
 
             extracted = json.loads(response.choices[0].message.content)
-
-            # --- 🔥 THE PREDANTIC MERGE ---
-            # model_validate triggers all the financial string parsing and bool casting
-            # defined in your state.py automatically.
             updated_data = {**state.model_dump(), **extracted}
             state = StartupState.model_validate(updated_data)
 
-            # --- 📈 PYTHON FINANCIAL ENGINE (The "Brain") ---
+            # FIX 2: Define notes_lower EARLY so it's available for valuation logic below
+            notes_lower = state.manager_notes.lower()
+
+            # --- 📈 THE PROFESSIONAL SCORING ENGINE (STRICT MODE) ---
             if not state.is_public:
                 headcount = state.headcount
                 funding = state.total_funding
                 revenue = state.annual_revenue
-
-                # 1. Base Monthly Burn ($15k per head standard)
-                monthly_burn = headcount * 15000 if headcount > 0 else 0
-
-                # 2. Hiring Multipliers
-                if state.hiring_status == "Aggressive":
-                    monthly_burn *= 1.2
-                elif state.hiring_status == "Freeze":
-                    monthly_burn *= 0.9
-
-                # 3. SENTIMENT ADJUSTMENT PROTOCOL
-                # If vibe is bad, we assume higher support costs and technical debt drag
-                if state.community_sentiment.lower() == "negative" or state.vibe_score < 4.0:
+                
+                # 1. Monthly Burn Logic (Standardized)
+                monthly_burn = headcount * 15000 if headcount > 0 else 50000 
+                if state.hiring_status == "Aggressive": monthly_burn *= 1.25
+                elif state.hiring_status == "Freeze": monthly_burn *= 0.85
+                
+                # Sentiment Risk Adjustment
+                if state.vibe_score < 4.0:
                     monthly_burn *= 1.15
-                    state.manager_notes += "\n[Analyst Note] Burn increased by 15% due to Sentiment Risk."
-
+                
                 state.estimated_monthly_burn = round(monthly_burn, 2)
 
-                # 4. Runway Calculation
-                # Handle millions (e.g., 46.1) vs full numbers
-                funding_actual = funding * 1_000_000 if funding < 1000 and funding > 0 else funding
-                
+                # 2. Runway Calculation
+                # FIX 3: Refined logic for funding scales
+                funding_actual = funding * 1_000_000 if 0 < funding < 1000 else funding
                 if monthly_burn > 0:
                     state.runway_months = round(funding_actual / monthly_burn, 2)
 
-                # 5. Strategic Scoring (Max 100)
-                base_score = 0
-                
-                # Financial Health (40 pts)
-                if state.runway_months >= 24: base_score += 40
-                elif state.runway_months >= 12: base_score += 25
-                elif state.runway_months >= 6: base_score += 10
-                
-                # Traction (40 pts)
-                if revenue > 0: base_score += 20
-                if state.hiring_status == "Aggressive": base_score += 20
-                
-                # Community Vibe (20 pts)
-                # Apply 10% CAC discount logic to the score if positive
-                vibe_pts = state.vibe_score * 2
-                if state.vibe_score > 8.5:
-                    vibe_pts *= 1.1 # 10% organic growth bonus
-                base_score += vibe_pts
+                # 3. STRICT PILLAR SCORING (Start at 0)
+                score = 0.0
 
-                state.investment_score = min(100.0, round(base_score, 1))
+                # Pillar A: Financial Health (Max 30)
+                if state.runway_months >= 24: score += 30
+                elif state.runway_months >= 12: score += 15
+                elif state.runway_months >= 6: score += 5
+                else: score -= 20 
 
-                # Valuation Estimate (20x Revenue if not provided)
+                # Pillar B: Traction & Scale (Max 30)
+                if revenue > 0: 
+                    score += 15
+                    if state.hiring_status == "Aggressive": score += 15 
+                else:
+                    if state.hiring_status == "Aggressive": score -= 10 
+
+                latest_round_amount = 0.0
+                if state.funding_history:
+                    latest_round_amount = state.funding_history[-1].amount 
+
+                # Valuation logic (Now notes_lower is safely defined)
+                if state.latest_valuation <= latest_round_amount or state.latest_valuation == 0:
+                    print(f"⚖️ Adjusting Valuation: Reported ${state.latest_valuation}M vs Raised ${latest_round_amount}M")
+                    revenue_multiple = (state.annual_revenue * 15.0) if state.annual_revenue > 0 else 0
+                    funding_multiple = latest_round_amount * 5.0
+                    state.latest_valuation = round(max(revenue_multiple, funding_multiple), 2)
+                    state.manager_notes += f"\n\n[SYSTEM: Valuation adjusted to ${state.latest_valuation}M based on 15x ARR / 5x Round Dilution Benchmarks.]"
+                
+                elif "ai" in notes_lower and state.annual_revenue > 0:
+                    fair_val = state.annual_revenue * 20.0
+                    if fair_val > state.latest_valuation:
+                        state.latest_valuation = round(fair_val, 2)
+                
+                # Pillar C: Team & Pedigree (Max 20)
+                pedigree_signals = ["ex-", "founder", "serial", "stanford", "mit", "y-combinator", "yc", "google", "meta", "openai"]
+                found_signals = sum(2 for signal in pedigree_signals if signal in notes_lower)
+                score += min(20, found_signals)
+
+                # Pillar D: Market Moat & Vibe (Max 20)
+                vibe_contribution = (state.vibe_score / 10) * 10 
+                score += vibe_contribution
+                
+                if "patent" in notes_lower or "first mover" in notes_lower:
+                    score += 10
+                elif "high threat" in notes_lower:
+                    score -= 5
+
+                # Pillar E: THE REVENUE GATE (Hard Cap)
+                if revenue == 0:
+                    score = min(score, 80.0)
+
+                state.investment_score = min(100.0, max(0.0, round(score, 1)))
+
+                # 4. Valuation Logic (Final fallback)
                 if state.latest_valuation == 0 and revenue > 0:
-                    state.latest_valuation = revenue * 20
+                    multiplier = 25 if "ai" in notes_lower else 15
+                    state.latest_valuation = revenue * multiplier
 
-            # --- 📝 LLM NARRATIVE EXPLANATION ---
-            explanation_prompt = "You are a VC financial analyst. Explain the current runway, burn, and investment score professionally."
+            # --- 📝 FINAL VERDICT TEMPLATE ---
+            explanation_prompt = """
+            You are a Senior VC Partner. You MUST follow this EXACT format. 
+            If a value is 0 or missing, state 'Data not available'.
+            
+            ### 👔 ANALYST VERDICT
+            **Finance:** [Score]/10 - [Brief 1-sentence reason]
+            **Traction:** [Score]/10 - [Brief 1-sentence reason]
+            **Team:** [Score]/10 - [Brief 1-sentence reason]
+            **Moat:** [Score]/10 - [Brief 1-sentence reason]
+            """
             
             explanation = await client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
+                temperature=0, 
                 messages=[
                     {"role": "system", "content": explanation_prompt},
                     {"role": "user", "content": f"Summarize this data:\n{state.model_dump_json()}"}
                 ],
             )
 
-            state.manager_notes += f"\n\n### 👔 ANALYST VERDICT\n{explanation.choices[0].message.content}"
-            print(f"✅ Analyst passed validation on attempt {attempt + 1}")
+            # FIX 4: Just append the content directly since the header is in the prompt
+            state.manager_notes += f"\n\n{explanation.choices[0].message.content}"
             return state
 
         except Exception as e:
-            error_message = str(e)
-            reflection_history.append({"attempt": attempt + 1, "error": error_message})
-            feedback = error_message
-            print(f"⚠️ Analyst Reflection: {error_message}. Retrying...")
+            print(f"⚠️ Analyst Reflection: {e}. Retrying...")
+            feedback = str(e)
             attempt += 1
 
     return state

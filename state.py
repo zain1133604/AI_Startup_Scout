@@ -53,7 +53,7 @@ class StartupState(BaseModel):
     founders: List[Founder] = []
     headcount: int = 0
     headcount_source: str = "Unknown"
-    
+
     total_funding: float = 0.0
     latest_valuation: Optional[float] = 0.0
     annual_revenue: float = 0.0 
@@ -120,3 +120,5 @@ class StartupState(BaseModel):
         arbitrary_types_allowed = True
         # This helps if Gemini sends extra keys we didn't define
         extra = "ignore"
+
+

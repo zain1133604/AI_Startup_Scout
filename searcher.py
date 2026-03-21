@@ -10,10 +10,10 @@ import json
 load_dotenv()
 gemini_key = os.environ.get("GEMINI_KEY")
 
-# FIX 1: Pass the actual variable to the client
-client = genai.Client(api_key="")
+
 
 async def researcher_agent(missing_info_list):
+    client = genai.Client(api_key=os.environ.get("GEMINI_KEY"))
     print("🕵️  Researcher Agent is starting work...")
 
 
@@ -22,7 +22,7 @@ async def researcher_agent(missing_info_list):
     for attempt in range(1, max_attempts + 1):
         try: 
             chat = client.chats.create(
-                model='gemini-2.5-flash',
+                model='gemini-2.5-flash-lite',
                 config={
                     'tools': [web_search_tool, hiring_pulse_tool ],
                     'automatic_function_calling': {'disable': False} 
@@ -96,17 +96,6 @@ async def researcher_agent(missing_info_list):
         - **Secondary Search:** Search `"{found_name} [Industry] reviews" OR "{found_name} [Industry] scam"`.
         - **Verification:** If the search results describe a product that does NOT match the startup's purpose (e.g. you find a music app but the target is a dating app), DISCARD THEM.
 
-### 🛑 CRITICAL DATA SCHEMA (ANALYST COMPATIBILITY V4.0):
-        You MUST format these specific data points as a list of OBJECTS in Section VII. 
-        1. Founders (Objects): {{ "name": "Full Name", "role": "CEO", "bio": "...", "linkedin": "..." }}
-        2. Competitors (Objects): {{ "name": "...", "description": "...", "threat_level": "High/Med/Low" }}
-        3. Funding History (Objects): {{ "round_name": "Series A", "amount": 25.0, "date": "April 2025" }}
-
-### 🛑 CRITICAL DATA SCHEMA (ANALYST COMPATIBILITY V4.0):
-        You MUST format these specific data points as a list of OBJECTS in Section VII. 
-        1. Founders (Objects): {{ "name": "Full Name", "role": "CEO", "bio": "...", "linkedin": "..." }}
-        2. Competitors (Objects): {{ "name": "...", "description": "...", "threat_level": "High/Med/Low" }}
-        3. Funding History (Objects): {{ "round_name": "Series A", "amount": 25.0, "date": "April 2025" }}
 
         ### 🧱 VII. RAW DATA BLOCK (FOR SYSTEM PARSING)
         You MUST provide the final data as a single JSON code block. 
@@ -131,77 +120,115 @@ async def researcher_agent(missing_info_list):
             }}
         }}
         MANDATORY: Return ONLY the JSON inside the code block for this section. Use 0.0 for missing numbers.
-        
-
+    
         NOTE: If you find multiple sources, use the most recent or reliable one (e.g., Crunchbase, Reuters, or Official Company Site).
     """
     
 
 
-# 1. Send the full master prompt
+    # -------------------------------
+    # 🧠 HELPER: JSON EXTRACTOR
+    # -------------------------------
+    def extract_json(content: str):
+        try:
+            # 1. Try proper markdown JSON block
+            match = re.search(r"```json\s*(.*?)\s*```", content, re.DOTALL)
+            if match:
+                return json.loads(match.group(1))
+
+            # 2. Fallback: any JSON-like object
+            match = re.search(r"\{.*\}", content, re.DOTALL)
+            if match:
+                return json.loads(match.group(0))
+
+        except Exception:
+            return None
+
+        return None
+
+
+    # -------------------------------
+    # 🚀 REFLECTION LOOP (FIXED)
+    # -------------------------------
     response = None
     content = ""
-    
-    for reflection_attempt in range(2): # Give it 2 chances to get the data right
+    data = None
+    ref_wait_time = 20
+
+    for reflection_attempt in range(2):
+        await asyncio.sleep(ref_wait_time)
+        ref_wait_time = ref_wait_time + 10
         print(f"📡 Researcher Attempt {reflection_attempt + 1}...")
-        
+
         response = chat.send_message(prompt)
-        content = response.text 
+        content = response.text
 
-        # --- THE QUALITY GATE ---
-        # 1. Did it forget the block?
-        # 2. Did it find $0 funding? (Usually means it found the wrong 'Artisan')
-        has_block = "--- START RAW DATA ---" in content
-        is_empty = "total_funding: 0.0" in content or "total_funding: 0" in content
-        
-        if has_block and not is_empty:
-            break  # ✅ SUCCESS: It found real data!
-        
-        if reflection_attempt == 0: # Only nudge if it's the first fail
-            print("⚠️ Reflection: Data looks empty or malformed. Sending a 'Nudge'...")
-            # We update the prompt for the next loop iteration
-            prompt += f"\n\n🚨 REFLECTION FEEDBACK: You returned 0.0 funding for {found_name}. This is likely wrong. Use the web_search_tool specifically for '{found_name} startup funding' and RE-WRITE the RAW DATA BLOCK."
+        data = extract_json(content)
+
+        # ✅ QUALITY CHECK (REAL SYSTEM)
+        if data:
+            try:
+                validated = StartupState.model_validate(data)
+
+                # Optional stronger check
+                if validated.total_funding > 0:
+                    print("✅ Valid structured data found")
+                    break
+
+            except Exception as e:
+                print(f"⚠️ Validation failed: {e}")
+
+        # 🔁 Reflection retry
+        if reflection_attempt == 0:
+            print("⚠️ Reflection: Invalid or missing structured data. Retrying...")
+
+            prompt += f"""
+
+    🚨 REFLECTION FEEDBACK:
+    Your previous response was invalid.
+
+    FIX:
+    - Return ONLY valid JSON
+    - Ensure 'total_funding' is correct and NOT 0
+    - Ensure company_name and industry are filled
+    """
         else:
-            print("⚠️ Reflection failed twice. Moving forward with what we have.")
+            print("⚠️ Reflection failed twice. Continuing with best effort.")
 
-    # --- (The rest of your code remains 100% the same) ---
-    
-    # 2. Initialize the State object
+
+    # -------------------------------
+    # 🏗️ STATE CREATION
+    # -------------------------------
     state = StartupState(
-        company_name=found_name, 
+        company_name=found_name,
         industry="Identified in Dossier",
-        manager_notes=content 
+        manager_notes=content
     )
 
-# 3. FILL THE HOUSE (New JSON-Based Parsing Logic)
+
+    # -------------------------------
+    # 🧱 STRUCTURED DATA PARSING
+    # -------------------------------
     try:
-        # Extract JSON from Markdown block
-        json_match = re.search(r"```json\n(.*?)\n```", content, re.DOTALL)
-        if not json_match:
-            # Fallback: check if it sent JSON without backticks
-            json_match = re.search(r"(\{.*?\})", content, re.DOTALL)
-
-        if json_match:
-            raw_json = json_match.group(1)
-            data = json.loads(raw_json)
-
-            # Use Pydantic to validate and update the state
-            # This replaces the entire "for line in raw_section" loop
+        if data:
             state = StartupState.model_validate({**state.model_dump(), **data})
-            
-            # Map sources specifically if they are in the nested JSON
+
             if "sources" in data:
                 state.sources.update(data["sources"])
 
-            print(f"✅ Structured Data Validated for {state.company_name}")
+            print(f"✅ Structured Data Applied for {state.company_name}")
         else:
-            print("⚠️ JSON block not found! Fallback to raw text summary.")
+            print("⚠️ No valid JSON found. Using raw text only.")
 
     except Exception as e:
-        print(f"⚠️ Structured Parsing Error: {e}. Falling back to manual assignment.")
+        print(f"⚠️ Final Parsing Error: {e}")
 
-    # 4. SHIP THE HOUSE (Make sure you are returning the 'state' object itself)
+
+    # -------------------------------
+    # 🚀 RETURN
+    # -------------------------------
     return state
+
 
 
 

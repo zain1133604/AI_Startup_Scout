@@ -11,25 +11,44 @@ async def critic_agent(state: StartupState, critic_vibe: str):
     print(f"🧐 The Devil's Advocate ({critic_vibe} mode) is looking for red flags...")
     
     # Use environment variable or your specific key
-    api_key = os.environ.get("GROQ_API_KEY", "")
+    api_key = os.environ.get("GROK_KEY")
     client = AsyncGroq(api_key=api_key)
 
     state_json = state.model_dump_json()
 
     # --- SHARED CROSS-EXAMINATION LOGIC ---
     vibe_logic = f"""
-    ### 🕵️ THE VIBE VS. MATH CROSS-EXAMINATION:
-    1. Community Sentiment: {state.community_sentiment}
-    2. Vibe Score: {state.vibe_score}/10
-    3. Top User Complaint: {state.top_complaint}
-    4. Reddit Signal: {state.reddit_signal}
-    5. Analyst Base Score: {state.investment_score}/100
+    ### 🕵️ AUDIT DATA INPUTS:
+    - Base Investment Score: {state.investment_score}/100
+    - Community Vibe Score: {state.vibe_score}/10
+    - Sentiment Analysis: {state.community_sentiment}
+    - Critical Signals: {state.top_complaint} | {state.reddit_signal}
 
-    ### 🎯 SCORE ADJUSTMENT PROTOCOL:
-    - If you find CRITICAL RED FLAGS: Deduct 10-30 points.
-    - If you find UNFAIR ADVANTAGES: Add 5-10 points.
-    - MANDATORY: You MUST output the final adjusted score at the very end in this EXACT format:
-      FINAL SCOUT SCORE: [number]
+    ### 🎯 SCORE ADJUSTMENT AUDIT (STRICT DETERMINISTIC)
+    As a Senior Auditor, apply these EXACT adjustments to the Base Score. Do not guess.
+    
+    1. PLATFORM RISK: If a ban (LinkedIn, Google, Meta) is confirmed: -15 pts. Else: 0.
+    2. CHURN RISK: If Churn > 50% or "High Churn" is explicitly mentioned: -10 pts. Else: 0.
+    3. MOAT BOOST: If 'Proprietary Database', 'Patent', or 'Unique Dataset' exists: +5 pts. Else: 0.
+    
+    4. VIBE MULTIPLIER (Final Step): 
+       - If Vibe Score < 3.0: Result = (Base + Adjustments) * 0.8
+       - If Vibe Score > 8.0: Result = (Base + Adjustments) * 1.1
+       - Otherwise: Result = (Base + Adjustments) * 1.0
+
+    ### 📋 REQUIRED OUTPUT FORMAT
+    (Note: Do not show your math. Only output the sections below.)
+
+    **VERDICT:** [Should Buy / Watchlist / Don't Buy]
+
+    **OPPORTUNITIES/RED FLAGS:**
+    - [Specific Bullet Point 1]
+    - [Specific Bullet Point 2]
+    
+    **STRATEGIC NARRATIVE:**
+    [One clean, professional paragraph summarizing the audit findings.]
+
+    FINAL SCOUT SCORE: [Final Calculated Number]
     """
 
     if critic_vibe == "hard":

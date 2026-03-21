@@ -7,10 +7,11 @@ import asyncio
 
 load_dotenv()
 gemini_key = os.environ.get("GEMINI_KEY")
-client = genai.Client(api_key="")
+
 
 
 async def sumarizer(pitch_deck_text):
+    client = genai.Client(api_key=os.environ.get("GEMINI_KEY"))
     print("\n👔 Summarizer is analyzing the briefing...")
 
     prompt =f"""

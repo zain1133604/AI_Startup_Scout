@@ -65,26 +65,41 @@ async def critic_node(state: ScoutState) -> ScoutState:
     mode = state["metadata"].get("mode", "normal")
     logger.info(f"Node: Critic | Reviewing in {mode.upper()} mode...")
     
-    # Run the agent - critic_agent now returns the updated StartupState object
+    # Capture the analyst's score before the critic starts (optional, for logging)
+    analyst_draft_score = state["startup"].investment_score
+    logger.info(f"⚖️ Analyst Draft Score: {analyst_draft_score}")
+
+    # Run the critic agent
+    # This will update state["startup"].investment_score with the FINAL score
     state["startup"] = await critic_agent(state["startup"], mode)
     
-    logger.info(f"✅ Final Review Complete. Score: {state['startup'].investment_score}")
+    # Force a final log to confirm the Critic's score is the one being shipped
+    logger.info(f"✅ Final Score (Critic Override): {state['startup'].investment_score}")
+    
     return state
-
 # --- 🚦 ROUTER ---
 
 def validate_research_quality(state: ScoutState) -> Literal["analyst", "researcher", "__end__"]:
     s = state["startup"]
     retries = state["retry_stats"].get("researcher", 0)
 
-    # If the researcher failed to even find a company name, we retry
-    if (s.company_name == "Pending" or not s.company_name) and retries < 2:
-        logger.warning("⚠️ Validation Failed: Missing core identity. Retrying...")
-        return "researcher"
-    
-    if s.company_name == "Pending" and retries >= 2:
-        logger.error("❌ Critical data missing after max retries. Terminating.")
+    # 🚨 Core identity check
+    if not s.company_name or s.company_name == "Pending":
+        if retries < 2:
+            return "researcher"
         return "__end__"
+
+    # 🚨 Data quality check (NEW)
+    weak_data = (
+        s.total_funding == 0 and
+        s.annual_revenue == 0 and
+        s.headcount == 0
+    )
+
+    if weak_data:
+        if retries < 2:
+            return "researcher"
+        return "analyst"  # fallback, don't kill pipeline
 
     return "analyst"
 
@@ -127,10 +142,13 @@ async def main_orchestrator():
     print("[2] Hard Stress-Test (Brutal Skeptic)")
     vibe_choice = input("Select Execution Mode: ")
     critic_vibe = "hard" if vibe_choice == "2" else "normal"
+
+    file_path = input("Bro, paste the path to your PDF here: ")
+    print("\n🔍 Scout is reading the document... please wait.")
     
     # 1. Extraction Phase
     print("\n📂 Reading Pitch Deck...")
-    deck_text = await text_extractor() 
+    deck_text = await text_extractor(file_path) 
     
     if not deck_text:
         logger.error("Extraction failed. Ensure deck.pdf is in the directory.")
