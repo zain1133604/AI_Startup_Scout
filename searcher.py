@@ -9,7 +9,7 @@ load_dotenv()
 gemini_key = os.environ.get("GEMINI_KEY")
 
 # FIX 1: Pass the actual variable to the client
-client = genai.Client(api_key="")
+client = genai.Client(api_key="gemini_key")
 
 async def researcher_agent(missing_info_list):
     print("🕵️  Researcher Agent is starting work...")

@@ -48,8 +48,12 @@ async def run_scout_squad():
     critic_vibe = "hard" if vibe_choice == "2" else "normal"
     print(f"✅ System initialized with {critic_vibe.upper()} mode.\n")
 
+    file_path = input("Bro, paste the path to your PDF here: ")
+    print("\n🔍 Scout is reading the document... please wait.")
+
     # 1. Extract Text from PDF
-    deck_text = await text_extractor()
+    deck_text = await text_extractor(file_path)
+
     if not deck_text: 
         print("❌ Script stopped: No text was extracted.")
         return
