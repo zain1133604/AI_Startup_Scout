@@ -7,7 +7,7 @@ import asyncio
 
 load_dotenv()
 gemini_key = os.environ.get("GEMINI_KEY")
-client = genai.Client(api_key="gemini_key")
+client = genai.Client(api_key=gemini_key)
 
 
 async def sumarizer(pitch_deck_text):
