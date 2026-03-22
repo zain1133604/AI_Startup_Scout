@@ -10,7 +10,8 @@ async def critic_agent(state: StartupState, critic_vibe:str):
     """
     print("🧐 The Devil's Advocate is looking for red flags...")
     
-    client = AsyncGroq(api_key="")
+    api_key = os.environ.get("GROK_KEY")
+    client = AsyncGroq(api_key=api_key)
 
     # Convert the object to JSON for the LLM to analyze
     state_json = state.model_dump_json()

@@ -2,13 +2,15 @@
 from groq import AsyncGroq
 import json
 from state import StartupState
+import os
 
 
 async def analyst_agent(state: StartupState):
 
     print("📊 Analyst Agent is calculating financial metrics...")
 
-    client = AsyncGroq(api_key="")
+    api_key = os.environ.get("GROK_KEY")
+    client = AsyncGroq(api_key=api_key)
 
     max_retries = 3
     attempt = 0
