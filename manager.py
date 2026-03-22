@@ -52,7 +52,7 @@ async def run_scout_squad():
     print("\n🔍 Scout is reading the document... please wait.")
 
     # 1. Extract Text from PDF
-    deck_text = await text_extractor(file_path)
+    deck_text = await text_extractor()
 
     if not deck_text: 
         print("❌ Script stopped: No text was extracted.")
