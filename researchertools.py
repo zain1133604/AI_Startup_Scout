@@ -10,7 +10,7 @@ def web_search_tool(query: str):
     Args:
         query: The search string to look up on Google.
     """
-    TAVILY_KEY = os.environ.get("TAVILY_KEY")
+    TAVILY_KEY = os.environ.get("TAVILY_API_KEY")
     tavily = TavilyClient(api_key=TAVILY_KEY)
     
     print(f"🛰️  Researcher Tool -> Searching for: {query}")
@@ -30,7 +30,7 @@ def hiring_pulse_tool(company_name: str):
     Checks job boards (LinkedIn, Wellfound, Indeed) to see how many 
     open roles a company has. High role count = growth signal.
     """
-    TAVILY_KEY = os.environ.get("TAVILY_KEY")
+    TAVILY_KEY = os.environ.get("TAVILY_API_KEY")
     tavily = TavilyClient(api_key=TAVILY_KEY)
     
     # We force the search to look at job boards only
