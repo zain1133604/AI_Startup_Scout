@@ -11,7 +11,7 @@ async def text_extractor():
     load_dotenv()
     llamaparse_key = os.environ.get("LLAMA_PARSE_KEY")
     parser = LlamaParse(
-        api_key="", 
+        api_key="llamaparse_key", 
         result_type="markdown",
         verbose=True  # This will show you the progress "dots"
     )
