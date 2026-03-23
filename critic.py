@@ -98,6 +98,6 @@ async def critic_agent(state: StartupState, critic_vibe: str):
         print(f"⚠️ Score extraction failed: {e}")
 
     # Store the full text in our state for the final report
-    state.critic_verdict = verdict_text
+    state.critic_verdict = str(verdict_text)
     
     return state

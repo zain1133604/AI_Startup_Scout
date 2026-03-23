@@ -22,7 +22,7 @@ async def researcher_agent(missing_info_list):
     for attempt in range(1, max_attempts + 1):
         try: 
             chat = client.chats.create(
-                model='gemini-2.5-flash-lite',
+                model='gemini-2.5-flash',
                 config={
                     'tools': [web_search_tool, hiring_pulse_tool ],
                     'automatic_function_calling': {'disable': False} 

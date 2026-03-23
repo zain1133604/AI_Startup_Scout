@@ -119,25 +119,43 @@ async def run_scout_squad():
 
 
 
-    # 5. Critic (The Skeptic with 3-Try Resilience)
+# 5. Critic (The Skeptic with 3-Try Resilience)
     print("\n🧐 The Devil's Advocate is reviewing the case...")    
+    
+    # 🌟 STEP 1: Initialize 'verdict' as an empty string to kill the yellow line
+    verdict = "" 
+
     for attempt in range(1, max_retries + 1):
         try:
             if attempt > 1:
                 print(f"🔄 Critic Retry Attempt {attempt}/{max_retries}... Waiting {retry_delay}s")
                 await asyncio.sleep(retry_delay)            
+            
             print("🧐 The Devil's Advocate is looking for red flags...")            
-            # --- THE CORE AGENT CALL ---
-            verdict = await critic_agent(state, critic_vibe)
-            state.critic_verdict = verdict            
+            
+            # 🌟 STEP 2: Call the agent and get the UPDATED STATE object
+            updated_result = await critic_agent(state, critic_vibe)
+            
+            # 🌟 STEP 3: Extract the STRING verdict from that object
+            # This prevents the circular reference error!
+            verdict = str(updated_result.critic_verdict)
+            
+            # Sync the main state with the results
+            state.critic_verdict = verdict
+            state.investment_score = updated_result.investment_score
+            
             print("\n🔥 THE CRITIC'S VERDICT:")
-            break  # <--- SUCCESS! Move to Final Export.
+            print(verdict)
+            break  
+            
         except Exception as e:
             print(f"⚠️ Critic Attempt {attempt} failed: {e}")
             if attempt == max_retries:
-                print("❌ Critic failed permanently after 3 attempts.")
-                # If Critic fails, we still have the Analyst data to export.
-                state.critic_verdict = "Critic analysis unavailable due to system timeout."
+                verdict = "Critic analysis unavailable."
+                state.critic_verdict = verdict
+
+    # Now 'verdict' is guaranteed to be a string here
+    match = re.search(r"FINAL SCOUT SCORE[:\* \s]*(\d+\.?\d*)", verdict)
 
 
     # 6. FINAL EXPORT

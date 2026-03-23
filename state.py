@@ -80,7 +80,12 @@ class StartupState(BaseModel):
     hiring_status: str = "Unknown"  
     open_roles: int = 0
 
-    sources: Dict[str, str] = {}
+    sources: Dict[str, Optional[str]] = Field(default_factory=lambda: {
+            "total_funding": "Not Found",
+            "latest_valuation": "Not Found",
+            "annual_revenue": "Not Found",
+            "headcount": "Not Found"
+        })
 
     community_sentiment: str = "Mixed"
     vibe_score: float = 5.0

@@ -35,18 +35,23 @@ async def summarizer_node(state: ScoutState) -> ScoutState:
 
 async def primary_research_node(state: ScoutState) -> ScoutState:
     retries = state["retry_stats"].get("researcher", 0)
-    logger.info(f"Node: Primary Research | Attempt: {retries + 1}")
-
+    
+    # 🌟 THE FIX: Mandatory wait for Gemini Free Tier (30-60s)
+    # This prevents the 429 error on the second and third attempts.
     if retries > 0:
-        await asyncio.sleep(2) # Backoff
-
+        logger.info(f"⏳ Throttling for Quota... Waiting 45s before retry.")
+        await asyncio.sleep(45) 
+    
+    logger.info(f"Node: Primary Research | Attempt: {retries + 1}")
+    
     try:
-        # researcher_agent now returns a fully hydrated StartupState object
+        # Pass the notes to the agent
         state["startup"] = await researcher_agent(state["startup"].manager_notes)
         logger.info(f"✅ Research complete for: {state['startup'].company_name}")
         
     except Exception as e:
         logger.error(f"Researcher Node Failed: {e}")
+        # Increment retries so the router knows when to stop
         state["retry_stats"]["researcher"] = retries + 1
         
     return state
@@ -143,12 +148,12 @@ async def main_orchestrator():
     vibe_choice = input("Select Execution Mode: ")
     critic_vibe = "hard" if vibe_choice == "2" else "normal"
 
-    file_path = input("Bro, paste the path to your PDF here: ")
-    print("\n🔍 Scout is reading the document... please wait.")
+    # file_path = input("Bro, paste the path to your PDF here: ")
+    # print("\n🔍 Scout is reading the document... please wait.")
     
     # 1. Extraction Phase
     print("\n📂 Reading Pitch Deck...")
-    deck_text = await text_extractor(file_path) 
+    deck_text = await text_extractor() 
     
     if not deck_text:
         logger.error("Extraction failed. Ensure deck.pdf is in the directory.")
