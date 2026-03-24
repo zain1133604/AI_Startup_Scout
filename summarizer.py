@@ -4,6 +4,10 @@ from textextractor import text_extractor
 from dotenv import load_dotenv
 import os
 import asyncio
+import logging 
+
+logger = logging.getLogger("Scout.Summarizer")
+
 
 load_dotenv()
 gemini_key = os.environ.get("GEMINI_KEY")
@@ -12,7 +16,7 @@ gemini_key = os.environ.get("GEMINI_KEY")
 
 async def sumarizer(pitch_deck_text):
     client = genai.Client(api_key=os.environ.get("GEMINI_KEY"))
-    print("\n👔 Summarizer is analyzing the briefing...")
+    logger.info("\n👔 Summarizer is analyzing the briefing...")
 
     prompt =f"""
     You are a Senior Investment Analyst. Read this extracted pitch deck text and provide a structured report.
@@ -56,30 +60,18 @@ async def sumarizer(pitch_deck_text):
             # Check for Rate Limit (429) or Server Overload (503)
             if "429" in error_msg or "503" in error_msg or "resource_exhausted" in error_msg:
                 if attempt < max_attempts:
-                    print(f"⏳ Gemini is busy (Attempt {attempt}/{max_attempts}). Retrying in {wait_time}s...")
+                    logger.warning(f"⏳ Gemini is busy (Attempt {attempt}/{max_attempts}). Retrying in {wait_time}s...")
                     await asyncio.sleep(wait_time)
                     # Double the wait time for the next attempt
                     wait_time += 20 
                 else:
-                    print("🛑 MAX RETRIES REACHED. The Gemini API is currently unavailable.")
+                    logger.info("🛑 MAX RETRIES REACHED. The Gemini API is currently unavailable.")
                     # Hard stop: This will stop the execution of the script
                     import sys
                     sys.exit("System terminated: API Quota exhausted after 6 attempts.")
             else: 
-                print(f"❌ Unexpected Error: {e}")
+                logger.error(f"❌ Unexpected Error: {e}")
                 raise e
 
     return response.text
 
-# --- UPDATE YOUR MAIN BLOCK ---
-if __name__ == "__main__":
-    import asyncio
-    
-    # Step 1: Run your extractor
-    deck_text = asyncio.run(text_extractor())
-    
-    # Step 2: Hand the text to the Manager
-    if deck_text:
-        analysis = asyncio.run(sumarizer(deck_text))
-        print("\n📊 MANAGER'S INITIAL REPORT:")
-        print(analysis)

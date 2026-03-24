@@ -2,9 +2,12 @@ from groq import AsyncGroq
 import json
 import os
 from state import StartupState
+import logging
+
+logger = logging.getLogger("Scout.Analyist")
 
 async def analyst_agent(state: StartupState):
-    print("📊 Analyst Agent is calculating financial metrics...")
+    logger.info("📊 Analyst Agent is calculating financial metrics...")
 
     api_key = os.environ.get("GROK_KEY")
     client = AsyncGroq(api_key=api_key)
@@ -23,7 +26,7 @@ async def analyst_agent(state: StartupState):
 
     while attempt < max_retries:
         try:
-            print(f"🔁 Analyst attempt {attempt + 1}")
+            logger.info(f"🔁 Analyst attempt {attempt + 1}")
             response = await client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 temperature=0, # FIX 1: Set to 0 here too for stable data extraction
@@ -86,7 +89,7 @@ async def analyst_agent(state: StartupState):
 
                 # Valuation logic (Now notes_lower is safely defined)
                 if state.latest_valuation <= latest_round_amount or state.latest_valuation == 0:
-                    print(f"⚖️ Adjusting Valuation: Reported ${state.latest_valuation}M vs Raised ${latest_round_amount}M")
+                    logger.info(f"⚖️ Adjusting Valuation: Reported ${state.latest_valuation}M vs Raised ${latest_round_amount}M")
                     revenue_multiple = (state.annual_revenue * 15.0) if state.annual_revenue > 0 else 0
                     funding_multiple = latest_round_amount * 5.0
                     state.latest_valuation = round(max(revenue_multiple, funding_multiple), 2)
@@ -148,7 +151,7 @@ async def analyst_agent(state: StartupState):
             return state
 
         except Exception as e:
-            print(f"⚠️ Analyst Reflection: {e}. Retrying...")
+            logger.warning(f"⚠️ Analyst Reflection: {e}. Retrying...")
             feedback = str(e)
             attempt += 1
 

@@ -138,51 +138,28 @@ def build_elite_scout_graph():
 
 # --- 🚀 EXECUTION ---
 
-async def main_orchestrator():
-    print("\n" + "═"*60)
-    print("🚀 THE STARTUP SCOUT v2.0 : GRAPH ORCHESTRATOR")
-    print("═"*60)
-    
-    print("[1] Balanced Due Diligence (Pragmatic)")
-    print("[2] Hard Stress-Test (Brutal Skeptic)")
-    vibe_choice = input("Select Execution Mode: ")
-    critic_vibe = "hard" if vibe_choice == "2" else "normal"
-
-    # file_path = input("Bro, paste the path to your PDF here: ")
-    # print("\n🔍 Scout is reading the document... please wait.")
-    
-    # 1. Extraction Phase
-    print("\n📂 Reading Pitch Deck...")
-    deck_text = await text_extractor() 
-    
-    if not deck_text:
-        logger.error("Extraction failed. Ensure deck.pdf is in the directory.")
-        return
-
-    # 2. State Initialization
+async def run_scout_workflow(deck_text: str, mode: str = "normal"):
+    """
+    This is the clean entry point for FastAPI. 
+    It takes the text and mode, runs the graph, and returns the result.
+    """
+    # 1. State Initialization
     initial_state: ScoutState = {
         "startup": StartupState(company_name="Pending"),
         "raw_deck_text": deck_text,
-        "metadata": {"mode": critic_vibe}, 
+        "metadata": {"mode": mode}, 
         "retry_stats": {"researcher": 0},
         "error_log": []
     }
 
-    # 3. Graph Execution
+    # 2. Build and Run
     engine = build_elite_scout_graph()
-    logger.info("Initializing Agent Squad...")
+    logger.info("🚀 Agent Squad Dispatched via API...")
+    
     final_output = await engine.ainvoke(initial_state)
-    
-    res = final_output["startup"]
-    
-    # 4. Final Result Presentation
-    print("\n" + "█"*60)
-    print(f"📊 FINAL INVESTMENT DOSSIER: {res.company_name.upper()}")
-    print(f"💰 FUNDING: ${res.total_funding:,.0f} | 📈 VALUATION: ${res.latest_valuation:,.0f}")
-    print(f"⏳ RUNWAY: {res.runway_months} months | 🔥 SCORE: {res.investment_score}/100")
-    print("█"*60)
-    print(f"\n🧐 CRITIC VERDICT:\n{res.critic_verdict}")
-    print("\n" + "═"*60)
+    return final_output["startup"]
 
+# Keep the 'if __name__ == "__main__":' block ONLY for local testing if you want
 if __name__ == "__main__":
-    asyncio.run(main_orchestrator()) 
+    # You can keep your old main_orchestrator logic here if you still want to run it via terminal
+    pass

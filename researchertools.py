@@ -1,6 +1,9 @@
 from tavily import TavilyClient
 from dotenv import load_dotenv
 import os
+import logging
+
+logger = logging.getLogger("Scout.Search-Tools")
 
 load_dotenv()
 
@@ -13,7 +16,7 @@ def web_search_tool(query: str):
     TAVILY_KEY = os.environ.get("TAVILY_KEY")
     tavily = TavilyClient(api_key=TAVILY_KEY)
     
-    print(f"🛰️  Researcher Tool -> Searching for: {query}")
+    logger.info(f"🛰️  Researcher Tool -> Searching for: {query}")
     response = tavily.search(query=query, search_depth="advanced", max_results=5, include_answer=True)
     
     context = ""
@@ -36,7 +39,7 @@ def hiring_pulse_tool(company_name: str):
     # We force the search to look at job boards only
     query = f"site:linkedin.com/jobs/ OR site:wellfound.com '{company_name}' open roles hiring"
     
-    print(f"🕵️  Checking Hiring Pulse for: {company_name}")
+    logger.info(f"🕵️  Checking Hiring Pulse for: {company_name}")
     response = tavily.search(query=query, search_depth="advanced", max_results=3)
     
     context = f"Hiring Data for {company_name}:\n"

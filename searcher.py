@@ -7,6 +7,10 @@ import sys
 import asyncio
 import re
 import json
+import logging
+logger = logging.getLogger("Scout.Searcher")
+
+
 load_dotenv()
 gemini_key = os.environ.get("GEMINI_KEY")
 
@@ -14,7 +18,7 @@ gemini_key = os.environ.get("GEMINI_KEY")
 
 async def researcher_agent(missing_info_list):
     client = genai.Client(api_key=os.environ.get("GEMINI_KEY"))
-    print("🕵️  Researcher Agent is starting work...")
+    logger.info("🕵️  Researcher Agent is starting work...")
 
 
     max_attempts = 6
@@ -35,22 +39,22 @@ async def researcher_agent(missing_info_list):
             # Check for Rate Limit (429) or Server Overload (503)
             if "429" in error_msg or "503" in error_msg or "resource_exhausted" in error_msg:
                 if attempt < max_attempts:
-                    print(f"⏳ Gemini is busy (Attempt {attempt}/{max_attempts}). Retrying in {wait_time}s...")
+                    logger.warning(f"⏳ Gemini is busy (Attempt {attempt}/{max_attempts}). Retrying in {wait_time}s...")
                     await asyncio.sleep(wait_time)
                     # Double the wait time for the next attempt
                     wait_time += 20 
                 else:
-                    print("🛑 MAX RETRIES REACHED. The Gemini API is currently unavailable.")
+                    logger.warning("🛑 MAX RETRIES REACHED. The Gemini API is currently unavailable.")
                     # Hard stop: This will stop the execution of the script
                     import sys
                     sys.exit("System terminated: API Quota exhausted after 6 attempts.")
             else: 
-                print(f"❌ Unexpected Error: {e}")
+                logger.error(f"❌ Unexpected Error: {e}")
                 raise e
     # 1. 🔍 QUICK ID: Just get the name first so we don't lose the "Target"
     id_check = chat.send_message(f"Based on this report: {missing_info_list}, what is the name of the startup? Return ONLY the name.")
     found_name = id_check.text.strip()
-    print(f"🛰️ Target Identified: {found_name}")
+    logger.info(f"🛰️ Target Identified: {found_name}")
 
     prompt = f"""
         You are a Senior Investment Researcher and Data Synthesizer. 
@@ -158,7 +162,7 @@ async def researcher_agent(missing_info_list):
     for reflection_attempt in range(2):
         await asyncio.sleep(ref_wait_time)
         ref_wait_time = ref_wait_time + 10
-        print(f"📡 Researcher Attempt {reflection_attempt + 1}...")
+        logger.info(f"📡 Researcher Attempt {reflection_attempt + 1}...")
 
         response = chat.send_message(prompt)
         content = response.text
@@ -180,7 +184,7 @@ async def researcher_agent(missing_info_list):
 
         # 🔁 Reflection retry
         if reflection_attempt == 0:
-            print("⚠️ Reflection: Invalid or missing structured data. Retrying...")
+            logger.warning("⚠️ Reflection: Invalid or missing structured data. Retrying...")
 
             prompt += f"""
 
@@ -193,7 +197,7 @@ async def researcher_agent(missing_info_list):
     - Ensure company_name and industry are filled
     """
         else:
-            print("⚠️ Reflection failed twice. Continuing with best effort.")
+            logger.warning("⚠️ Reflection failed twice. Continuing with best effort.")
 
 
     # -------------------------------
@@ -216,12 +220,12 @@ async def researcher_agent(missing_info_list):
             if "sources" in data:
                 state.sources.update(data["sources"])
 
-            print(f"✅ Structured Data Applied for {state.company_name}")
+            logger.info(f"✅ Structured Data Applied for {state.company_name}")
         else:
-            print("⚠️ No valid JSON found. Using raw text only.")
+            logger.warning("⚠️ No valid JSON found. Using raw text only.")
 
     except Exception as e:
-        print(f"⚠️ Final Parsing Error: {e}")
+        logger.error(f"⚠️ Final Parsing Error: {e}")
 
 
     # -------------------------------

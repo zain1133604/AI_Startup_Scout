@@ -2,13 +2,16 @@ from groq import AsyncGroq
 import os
 import re
 from state import StartupState
+import logging
+
+logger = logging.getLogger("Scout.Critic")
 
 async def critic_agent(state: StartupState, critic_vibe: str): 
     """
     Receives the final StartupState, performs a brutal logic audit, 
     and updates the state with a final score and verdict.
     """
-    print(f"🧐 The Devil's Advocate ({critic_vibe} mode) is looking for red flags...")
+    logger.info(f"🧐 The Devil's Advocate ({critic_vibe} mode) is looking for red flags...")
     
     # Use environment variable or your specific key
     api_key = os.environ.get("GROK_KEY")
@@ -93,9 +96,9 @@ async def critic_agent(state: StartupState, critic_vibe: str):
         if score_match:
             final_score = float(score_match.group(1))
             state.investment_score = final_score
-            print(f"⚖️ Critic Final Score: {final_score}")
+            logger.info(f"⚖️ Critic Final Score: {final_score}")
     except Exception as e:
-        print(f"⚠️ Score extraction failed: {e}")
+        logger.error(f"⚠️ Score extraction failed: {e}")
 
     # Store the full text in our state for the final report
     state.critic_verdict = str(verdict_text)

@@ -2,11 +2,14 @@ import nest_asyncio
 from llama_parse import LlamaParse
 from dotenv import load_dotenv
 import os
+import logging
 
+
+logger  = logging.getLogger("Scout.textextractor")
 # This is required for running async code in notebooks or standard scripts
 nest_asyncio.apply()
 
-async def text_extractor():
+async def text_extractor(file_path : str):
     # 1. Initialize with the newer settings
     load_dotenv()
     llamaparse_key = os.environ.get("LLAMA_PARSE_KEY")
@@ -16,9 +19,6 @@ async def text_extractor():
         verbose=True  # This will show you the progress "dots"
     )
 
-    file_path = input("Bro, paste the path to your PDF here: ")
-    print("\n🔍 Scout is reading the document... please wait.")
-
     try:
         # 2. Use ALOAD_DATA (Async Load) and AWAIT it
         # This is the key change!
@@ -26,7 +26,7 @@ async def text_extractor():
         documents = await parser.aload_data(file_path)
 
         if not documents:
-            print("❌ Nothing found. The PDF might be empty or unreadable.")
+            logger.error("❌ Nothing found. The PDF might be empty or unreadable.")
             return None
 
         # 3. Extract the text from the first document object
@@ -41,7 +41,7 @@ async def text_extractor():
         return extracted_text
         
     except Exception as e:
-        print(f"\n❌ Damn, something went wrong: {e}")
+        logger.error(f"\n❌ Damn, something went wrong: {e}")
 
 # To run an async function in a normal script:
 if __name__ == "__main__":
