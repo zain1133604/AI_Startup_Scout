@@ -33,7 +33,10 @@ class ScoutState(TypedDict):
 async def summarizer_node(state: ScoutState) -> Dict[str, Any]:
     logger.info("Node: Summarizer | Analyzing pitch deck...")
     summary = await sumarizer(state["raw_deck_text"])
-    state["startup"].manager_notes = summary
+    
+    # Update the local object
+    startup_obj = state["startup"]
+    startup_obj.manager_notes = summary or "" # Fallback to empty string
     
     trace_entry = {
         "node": "summarizer",
@@ -42,32 +45,34 @@ async def summarizer_node(state: ScoutState) -> Dict[str, Any]:
         "status": "Success",
         "timestamp": datetime.now().strftime("%H:%M:%S")
     }
-    return {**state, "trace": [trace_entry]}
+    # 🔥 ONLY return the keys you changed
+    return {"startup": startup_obj, "trace": [trace_entry]}
 
 async def primary_research_node(state: ScoutState) -> Dict[str, Any]:
     retries = state["retry_stats"].get("researcher", 0)
     
     if retries > 0:
-        logger.info(f"⏳ Throttling for Quota... Waiting 45s before retry.")
+        logger.info(f"⏳ Throttling for Quota... Waiting 45s.")
         await asyncio.sleep(45) 
     
-    logger.info(f"Node: Primary Research | Attempt: {retries + 1}")
-    
     try:
-        state["startup"] = await researcher_agent(state["startup"].manager_notes)
-        logger.info(f"✅ Research complete for: {state['startup'].company_name}")
+        # Pass the notes to the agent
+        updated_startup = await researcher_agent(state["startup"].manager_notes)
         
         trace_entry = {
             "node": "researcher",
             "agent": "Market Researcher",
             "action": f"Web Search (Attempt {retries + 1})",
-            "found_company": state["startup"].company_name,
+            "found_company": updated_startup.company_name,
             "status": "Success",
             "timestamp": datetime.now().strftime("%H:%M:%S")
         }
+        return {"startup": updated_startup, "trace": [trace_entry]}
+        
     except Exception as e:
         logger.error(f"Researcher Node Failed: {e}")
-        state["retry_stats"]["researcher"] = retries + 1
+        # Update retry count in state
+        new_retries = retries + 1
         trace_entry = {
             "node": "researcher",
             "agent": "Market Researcher",
@@ -75,13 +80,14 @@ async def primary_research_node(state: ScoutState) -> Dict[str, Any]:
             "error": str(e),
             "timestamp": datetime.now().strftime("%H:%M:%S")
         }
-        
-    return {**state, "trace": [trace_entry]}
+        return {"retry_stats": {"researcher": new_retries}, "trace": [trace_entry]}
 
 async def analyst_node(state: ScoutState) -> Dict[str, Any]:
     logger.info("Node: Financial Analyst | Processing unit economics...")
     try:
-        state["startup"] = await analyst_agent(state["startup"])
+        # 1. Run agent and get the UPDATED StartupState object
+        updated_startup = await analyst_agent(state["startup"])
+        
         trace_entry = {
             "node": "analyst",
             "agent": "Financial Analyst",
@@ -89,30 +95,43 @@ async def analyst_node(state: ScoutState) -> Dict[str, Any]:
             "status": "Success",
             "timestamp": datetime.now().strftime("%H:%M:%S")
         }
-        return {**state, "trace": [trace_entry]}
+        # 2. Return ONLY the changes. LangGraph merges this for you.
+        return {"startup": updated_startup, "trace": [trace_entry]}
+        
     except Exception as e:
         logger.error(f"Analyst Node Failure: {e}")
-        return state
+        # Even if it fails, return a trace so the UI shows the error
+        trace_entry = {
+            "node": "analyst",
+            "agent": "Financial Analyst",
+            "status": "Failed",
+            "error": str(e),
+            "timestamp": datetime.now().strftime("%H:%M:%S")
+        }
+        return {"trace": [trace_entry]}
 
 async def critic_node(state: ScoutState) -> Dict[str, Any]:
     mode = state["metadata"].get("mode", "normal")
     logger.info(f"Node: Critic | Reviewing in {mode.upper()} mode...")
     
     analyst_draft_score = state["startup"].investment_score
-    state["startup"] = await critic_agent(state["startup"], mode)
     
-    logger.info(f"✅ Final Score (Critic Override): {state['startup'].investment_score}")
+    # 1. Run agent
+    updated_startup = await critic_agent(state["startup"], mode)
+    
+    logger.info(f"✅ Final Score (Critic Override): {updated_startup.investment_score}")
     
     trace_entry = {
         "node": "critic",
         "agent": "Venture Critic",
         "action": f"Final Scoring ({mode} mode)",
         "draft_score": analyst_draft_score,
-        "final_score": state["startup"].investment_score,
+        "final_score": updated_startup.investment_score,
         "timestamp": datetime.now().strftime("%H:%M:%S")
     }
     
-    return {**state, "trace": [trace_entry]}
+    # 2. Return ONLY the changes
+    return {"startup": updated_startup, "trace": [trace_entry]}
 
 # --- 🚦 ROUTER ---
 
