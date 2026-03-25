@@ -1,6 +1,8 @@
 import asyncio
 import logging
-from typing import Dict, Any, TypedDict, Literal, List
+import operator
+from datetime import datetime
+from typing import Dict, Any, TypedDict, Literal, List, Annotated
 
 from langgraph.graph import StateGraph, END
 
@@ -23,21 +25,28 @@ class ScoutState(TypedDict):
     metadata: Dict[str, Any]
     retry_stats: Dict[str, int]
     error_log: List[str]
+    # 🔥 The Recruiter Magnet: Structured Trace
+    trace: Annotated[List[Dict[str, Any]], operator.add]
 
 # --- ⚡ NODE IMPLEMENTATIONS ---
 
-async def summarizer_node(state: ScoutState) -> ScoutState:
+async def summarizer_node(state: ScoutState) -> Dict[str, Any]:
     logger.info("Node: Summarizer | Analyzing pitch deck...")
-    # Extract summary from the raw PDF text
     summary = await sumarizer(state["raw_deck_text"])
     state["startup"].manager_notes = summary
-    return state
+    
+    trace_entry = {
+        "node": "summarizer",
+        "agent": "Summarizer",
+        "action": "Pitch Deck Text Analysis",
+        "status": "Success",
+        "timestamp": datetime.now().strftime("%H:%M:%S")
+    }
+    return {**state, "trace": [trace_entry]}
 
-async def primary_research_node(state: ScoutState) -> ScoutState:
+async def primary_research_node(state: ScoutState) -> Dict[str, Any]:
     retries = state["retry_stats"].get("researcher", 0)
     
-    # 🌟 THE FIX: Mandatory wait for Gemini Free Tier (30-60s)
-    # This prevents the 429 error on the second and third attempts.
     if retries > 0:
         logger.info(f"⏳ Throttling for Quota... Waiting 45s before retry.")
         await asyncio.sleep(45) 
@@ -45,56 +54,77 @@ async def primary_research_node(state: ScoutState) -> ScoutState:
     logger.info(f"Node: Primary Research | Attempt: {retries + 1}")
     
     try:
-        # Pass the notes to the agent
         state["startup"] = await researcher_agent(state["startup"].manager_notes)
         logger.info(f"✅ Research complete for: {state['startup'].company_name}")
         
+        trace_entry = {
+            "node": "researcher",
+            "agent": "Market Researcher",
+            "action": f"Web Search (Attempt {retries + 1})",
+            "found_company": state["startup"].company_name,
+            "status": "Success",
+            "timestamp": datetime.now().strftime("%H:%M:%S")
+        }
     except Exception as e:
         logger.error(f"Researcher Node Failed: {e}")
-        # Increment retries so the router knows when to stop
         state["retry_stats"]["researcher"] = retries + 1
+        trace_entry = {
+            "node": "researcher",
+            "agent": "Market Researcher",
+            "status": "Failed",
+            "error": str(e),
+            "timestamp": datetime.now().strftime("%H:%M:%S")
+        }
         
-    return state
+    return {**state, "trace": [trace_entry]}
 
-async def analyst_node(state: ScoutState) -> ScoutState:
+async def analyst_node(state: ScoutState) -> Dict[str, Any]:
     logger.info("Node: Financial Analyst | Processing unit economics...")
     try:
-        # analyst_agent now handles its own internal validation and returns StartupState
         state["startup"] = await analyst_agent(state["startup"])
-        return state
+        trace_entry = {
+            "node": "analyst",
+            "agent": "Financial Analyst",
+            "action": "Unit Economics Calculation",
+            "status": "Success",
+            "timestamp": datetime.now().strftime("%H:%M:%S")
+        }
+        return {**state, "trace": [trace_entry]}
     except Exception as e:
         logger.error(f"Analyst Node Failure: {e}")
         return state
 
-async def critic_node(state: ScoutState) -> ScoutState:
+async def critic_node(state: ScoutState) -> Dict[str, Any]:
     mode = state["metadata"].get("mode", "normal")
     logger.info(f"Node: Critic | Reviewing in {mode.upper()} mode...")
     
-    # Capture the analyst's score before the critic starts (optional, for logging)
     analyst_draft_score = state["startup"].investment_score
-    logger.info(f"⚖️ Analyst Draft Score: {analyst_draft_score}")
-
-    # Run the critic agent
-    # This will update state["startup"].investment_score with the FINAL score
     state["startup"] = await critic_agent(state["startup"], mode)
     
-    # Force a final log to confirm the Critic's score is the one being shipped
     logger.info(f"✅ Final Score (Critic Override): {state['startup'].investment_score}")
     
-    return state
+    trace_entry = {
+        "node": "critic",
+        "agent": "Venture Critic",
+        "action": f"Final Scoring ({mode} mode)",
+        "draft_score": analyst_draft_score,
+        "final_score": state["startup"].investment_score,
+        "timestamp": datetime.now().strftime("%H:%M:%S")
+    }
+    
+    return {**state, "trace": [trace_entry]}
+
 # --- 🚦 ROUTER ---
 
 def validate_research_quality(state: ScoutState) -> Literal["analyst", "researcher", "__end__"]:
     s = state["startup"]
     retries = state["retry_stats"].get("researcher", 0)
 
-    # 🚨 Core identity check
     if not s.company_name or s.company_name == "Pending":
         if retries < 2:
             return "researcher"
         return "__end__"
 
-    # 🚨 Data quality check (NEW)
     weak_data = (
         s.total_funding == 0 and
         s.annual_revenue == 0 and
@@ -104,7 +134,7 @@ def validate_research_quality(state: ScoutState) -> Literal["analyst", "research
     if weak_data:
         if retries < 2:
             return "researcher"
-        return "analyst"  # fallback, don't kill pipeline
+        return "analyst"
 
     return "analyst"
 
@@ -139,27 +169,22 @@ def build_elite_scout_graph():
 # --- 🚀 EXECUTION ---
 
 async def run_scout_workflow(deck_text: str, mode: str = "normal"):
-    """
-    This is the clean entry point for FastAPI. 
-    It takes the text and mode, runs the graph, and returns the result.
-    """
-    # 1. State Initialization
     initial_state: ScoutState = {
         "startup": StartupState(company_name="Pending"),
         "raw_deck_text": deck_text,
         "metadata": {"mode": mode}, 
         "retry_stats": {"researcher": 0},
-        "error_log": []
+        "error_log": [],
+        "trace": [] # 👈 Initializing the trace
     }
 
-    # 2. Build and Run
     engine = build_elite_scout_graph()
     logger.info("🚀 Agent Squad Dispatched via API...")
     
     final_output = await engine.ainvoke(initial_state)
-    return final_output["startup"]
+    
+    # Return everything so you can see the trace in your API response
+    return final_output
 
-# Keep the 'if __name__ == "__main__":' block ONLY for local testing if you want
 if __name__ == "__main__":
-    # You can keep your old main_orchestrator logic here if you still want to run it via terminal
     pass

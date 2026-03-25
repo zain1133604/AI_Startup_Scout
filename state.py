@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
-from typing import List, Optional, Dict, Union
+from pydantic import BaseModel, Field, HttpUrl, field_validator
+from typing import List, Optional, Dict, Union, Annotated, Any
 import re
+import operator
 
 def parse_financial_string(val: Union[str, float, int]) -> float:
     """Converts strings like '46.1M' or '2B' into actual floats."""
@@ -93,8 +94,6 @@ class StartupState(BaseModel):
     reddit_signal: str = "No data"
     investment_score: float = 0.0
 
-    # --- 🛡️ IMPROVED VALIDATORS ---
-
     @field_validator('is_public', mode='before')
     @classmethod
     def force_bool(cls, v):
@@ -123,7 +122,4 @@ class StartupState(BaseModel):
 
     class Config:
         arbitrary_types_allowed = True
-        # This helps if Gemini sends extra keys we didn't define
         extra = "ignore"
-
-
