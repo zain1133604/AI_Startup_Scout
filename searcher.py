@@ -139,10 +139,18 @@ async def researcher_agent(missing_info_list):
                 break
         
         except Exception as e:
-            logger.warning(f"⚠️ Reflection {reflection_attempt + 1} failed: {e}")
-            if reflection_attempt == 0:
-                full_prompt += "\n\n🚨 ERROR: Your previous response lacked valid JSON. Please provide the JSON block in Section VII."
-            continue
+                    logger.warning(f"⚠️ Reflection {reflection_attempt + 1} failed: {e}")
+                    # If it's a Quota error, don't just "continue", wait or exit
+                    if "429" in str(e) or "resource_exhausted" in str(e).lower():
+                        # Force a "failed" state that the Manager can read
+                        return StartupState(
+                            company_name="Pending", 
+                            manager_notes="CRITICAL_QUOTA_ERROR: Gemini API is exhausted."
+                        )
+                    
+                    if reflection_attempt == 0:
+                        full_prompt += "\n\n🚨 ERROR: Your previous response lacked valid JSON."
+                    continue
 
     # --- 4. STATE ASSEMBLY ---
     found_name = data.get("company_name", "Unknown") if data else "Unknown"

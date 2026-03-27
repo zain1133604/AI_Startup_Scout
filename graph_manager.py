@@ -23,9 +23,9 @@ class ScoutState(TypedDict):
     startup: StartupState
     raw_deck_text: str 
     metadata: Dict[str, Any]
-    retry_stats: Dict[str, int]
-    error_log: List[str]
-    # 🔥 The Recruiter Magnet: Structured Trace
+    # Use operator.add or a custom merger to ensure retries don't reset
+    retry_stats: Annotated[Dict[str, int], operator.ior] 
+    error_log: Annotated[List[str], operator.add]
     trace: Annotated[List[Dict[str, Any]], operator.add]
 
 # --- ⚡ NODE IMPLEMENTATIONS ---
@@ -49,38 +49,49 @@ async def summarizer_node(state: ScoutState) -> Dict[str, Any]:
     return {"startup": startup_obj, "trace": [trace_entry]}
 
 async def primary_research_node(state: ScoutState) -> Dict[str, Any]:
-    retries = state["retry_stats"].get("researcher", 0)
+    # 1. Get current retries
+    current_retries = state.get("retry_stats", {}).get("researcher", 0)
     
-    if retries > 0:
-        logger.info(f"⏳ Throttling for Quota... Waiting 45s.")
+    if current_retries > 0:
+        logger.info(f"⏳ Throttling for Quota... Waiting 45s. (Attempt {current_retries + 1})")
         await asyncio.sleep(45) 
     
     try:
         # Pass the notes to the agent
         updated_startup = await researcher_agent(state["startup"].manager_notes)
         
+        # FIX: We MUST increment the counter even on 'Success' (which might be a 'Pending' success)
+        # because the router needs to know this attempt is OVER.
+        new_stats = {"researcher": current_retries + 1}
+        
         trace_entry = {
             "node": "researcher",
             "agent": "Market Researcher",
-            "action": f"Web Search (Attempt {retries + 1})",
+            "action": f"Web Search (Attempt {current_retries + 1})",
             "found_company": updated_startup.company_name,
-            "status": "Success",
+            "status": "Completed",
             "timestamp": datetime.now().strftime("%H:%M:%S")
         }
-        return {"startup": updated_startup, "trace": [trace_entry]}
+        
+        return {
+            "startup": updated_startup, 
+            "retry_stats": new_stats, # This updates the global counter
+            "trace": [trace_entry]
+        }
         
     except Exception as e:
-        logger.error(f"Researcher Node Failed: {e}")
-        # Update retry count in state
-        new_retries = retries + 1
+        logger.error(f"Researcher Node Crashed: {e}")
         trace_entry = {
             "node": "researcher",
             "agent": "Market Researcher",
-            "status": "Failed",
+            "status": "Crashed",
             "error": str(e),
             "timestamp": datetime.now().strftime("%H:%M:%S")
         }
-        return {"retry_stats": {"researcher": new_retries}, "trace": [trace_entry]}
+        return {
+            "retry_stats": {"researcher": current_retries + 1}, 
+            "trace": [trace_entry]
+        }
 
 async def analyst_node(state: ScoutState) -> Dict[str, Any]:
     logger.info("Node: Financial Analyst | Processing unit economics...")
@@ -135,23 +146,24 @@ async def critic_node(state: ScoutState) -> Dict[str, Any]:
 
 def validate_research_quality(state: ScoutState) -> Literal["analyst", "researcher", "__end__"]:
     s = state["startup"]
+    # Look at the actual retry count from state
     retries = state.get("retry_stats", {}).get("researcher", 0)
     
-    # 1. Check for API Exhaustion (Look for the 429 error in logs/state)
-    if state.get("error_log") and "429" in str(state["error_log"][-1]):
-        logger.error("🛑 Quota hit. Moving to Analyst with 'Best Effort' data.")
-        return "analyst" 
+    logger.info(f"Checking Quality... Attempt: {retries}, Company: {s.company_name}")
 
-    # 2. Level 1: No Name = Total Failure
-    if not s.company_name or s.company_name in ["Pending", "Unknown"]:
-        return "researcher" if retries < 1 else "__end__"
+    # BUG FIX: If we see "API Error" in the notes or name is "Pending", 
+    # and we've already tried, STOP FOREVER.
+    if s.company_name == "Pending" or "Quota Exhausted" in s.manager_notes:
+        if retries >= 1:
+            logger.error("🛑 Hard Stop: Quota exhausted and retry limit reached.")
+            return "__end__"
+        return "researcher"
 
-    # 3. Level 2: Thin Data
+    # If data is thin but we already retried, move to analyst anyway
     has_metrics = (s.total_funding > 0 or s.annual_revenue > 0)
-    if not has_metrics and retries < 1:
-        # Before retrying, add a tiny sleep to let the Per-Minute quota reset
-        import time
-        time.sleep(2) 
+    if not has_metrics:
+        if retries >= 1:
+            return "analyst" # Move on with what we have
         return "researcher"
 
     return "analyst"
