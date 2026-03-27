@@ -2,7 +2,7 @@ import gradio as gr
 import asyncio
 from graph_manager import run_scout_workflow
 import os
-from PyPDF2 import PdfReader # Ensure this is in your requirements.txt
+from PyPDF2 import PdfReader
 
 async def scout_ui_bridge(pdf_file, mode):
     if not pdf_file:
@@ -10,25 +10,35 @@ async def scout_ui_bridge(pdf_file, mode):
 
     # 1. Extract Text from PDF (Properly)
     try:
+        # Use the name attribute to get the file path
         reader = PdfReader(pdf_file.name)
         text = ""
         for page in reader.pages:
-            text += page.extract_text()
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text + "\n"
     except Exception as e:
         return {"error": f"Failed to read PDF: {str(e)}"}, []
 
     # 2. Run the LangGraph Workflow
-    # Note: run_scout_workflow is likely async, so we await it
-    result = await run_scout_workflow(text, mode)
-    
-    # 3. Format output for Gradio
-    startup_data = result.get("startup", {})
-    execution_trace = result.get("trace", [])
-    
-    return startup_data, execution_trace
+    try:
+        result = await run_scout_workflow(text, mode)
+        
+        # 3. Format output for Gradio
+        startup_data = result.get("startup", {})
+        execution_trace = result.get("trace", [])
+        
+        return startup_data, execution_trace
+    except Exception as e:
+        return {"error": f"Workflow failed: {str(e)}"}, []
 
 # --- 🎨 THE UI DESIGN ---
-with gr.Blocks(theme=gr.themes.Soft(primary_hue="blue", secondary_hue="slate")) as demo:
+# Added api_open=False to stop the 500 error during FastAPI mounting
+with gr.Blocks(
+    theme=gr.themes.Soft(primary_hue="blue", secondary_hue="slate"), 
+    delete_cache=(60, 3600),
+    analytics_enabled=False
+) as demo:
     gr.Markdown("# 🛡️ The Startup Scout")
     gr.Markdown("### Autonomous Multi-Agent VC Due Diligence")
     
@@ -57,8 +67,10 @@ with gr.Blocks(theme=gr.themes.Soft(primary_hue="blue", secondary_hue="slate")) 
     run_btn.click(
         fn=scout_ui_bridge,
         inputs=[file_input, mode_input],
-        outputs=[output_json, trace_display]
+        outputs=[output_json, trace_display],
+        api_name=False # CRITICAL: Disables internal API route that causes the 500 error
     )
 
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=7860)
+    # For local testing
+    demo.launch(server_name="0.0.0.0", server_port=int(os.environ.get("PORT", 7860)))
