@@ -23,7 +23,7 @@ async def researcher_agent(missing_info_list):
     for attempt in range(1, max_attempts + 1):
         try: 
             chat = client.chats.create(
-                model='gemini-2.5-flash',
+                model='gemini-2.5-flash-lite',
                 config={
                     'tools': [web_search_tool, hiring_pulse_tool],
                     'automatic_function_calling': {'disable': False} 
@@ -122,7 +122,7 @@ async def researcher_agent(missing_info_list):
     
     for reflection_attempt in range(2):
         logger.info(f"📡 Researcher Execution (Attempt {reflection_attempt + 1})...")
-        asyncio.sleep(30)
+        await asyncio.sleep(30)
         
         try:
             # FIXED: Sending 'full_prompt'

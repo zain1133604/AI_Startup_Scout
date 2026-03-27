@@ -48,7 +48,7 @@ async def sumarizer(pitch_deck_text):
     for attempt in range(1, max_attempts + 1):
         try:            
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.5-flash-lite",
                 contents=prompt
             )
             # If successful, break out of the loop
