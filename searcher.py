@@ -1,74 +1,65 @@
 from google import genai
-from researchertools import web_search_tool , hiring_pulse_tool
+from researchertools import web_search_tool, hiring_pulse_tool
 from dotenv import load_dotenv
 import os
-from state import StartupState, parse_financial_string
-import sys
+from state import StartupState
 import asyncio
 import re
 import json
 import logging
+
 logger = logging.getLogger("Scout.Searcher")
-
-
 load_dotenv()
-gemini_key = os.environ.get("GEMINI_KEY")
-
-
 
 async def researcher_agent(missing_info_list):
     client = genai.Client(api_key=os.environ.get("GEMINI_KEY"))
-    logger.info("🕵️  Researcher Agent is starting work...")
+    logger.info("🕵️ Researcher Agent is starting work...")
 
+    # --- 1. INITIALIZE SESSION ---
+    max_attempts = 3 
+    wait_time = 15
+    chat = None
 
-    max_attempts = 6
-    wait_time = 20
     for attempt in range(1, max_attempts + 1):
         try: 
             chat = client.chats.create(
                 model='gemini-2.5-flash',
                 config={
-                    'tools': [web_search_tool, hiring_pulse_tool ],
+                    'tools': [web_search_tool, hiring_pulse_tool],
                     'automatic_function_calling': {'disable': False} 
                 }
             )
             break 
         except Exception as e:
-            error_msg = str(e).lower()
-            
-            # Check for Rate Limit (429) or Server Overload (503)
-            if "429" in error_msg or "503" in error_msg or "resource_exhausted" in error_msg:
+            if any(code in str(e) for code in ["429", "503", "resource_exhausted"]):
                 if attempt < max_attempts:
-                    logger.warning(f"⏳ Gemini is busy (Attempt {attempt}/{max_attempts}). Retrying in {wait_time}s...")
+                    logger.warning(f"⏳ API Busy. Retrying in {wait_time}s...")
                     await asyncio.sleep(wait_time)
-                    # Double the wait time for the next attempt
-                    wait_time += 20 
+                    wait_time += 15
                 else:
-                    logger.warning("🛑 MAX RETRIES REACHED. The Gemini API is currently unavailable.")
-                    # Hard stop: This will stop the execution of the script
-                    import sys
-                    sys.exit("System terminated: API Quota exhausted after 6 attempts.")
-            else: 
-                logger.error(f"❌ Unexpected Error: {e}")
+                    logger.error("🛑 API Quota Exhausted.")
+                    return StartupState(company_name="Pending", manager_notes="API Error: Quota Exhausted")
+            else:
                 raise e
-    # 1. 🔍 QUICK ID: Just get the name first so we don't lose the "Target"
-    id_check = chat.send_message(f"Based on this report: {missing_info_list}, what is the name of the startup? Return ONLY the name.")
-    found_name = id_check.text.strip()
-    logger.info(f"🛰️ Target Identified: {found_name}")
 
-    prompt = f"""
+    # --- 2. THE PROMPT ---
+    # Note: I added a instruction to find the name FIRST since we removed the separate ID call.
+# We remove the separate id_check call and let the prompt handle it.
+    full_prompt = f"""
         You are a Senior Investment Researcher and Data Synthesizer. 
-        Your mission is to take the initial 'Manager's Report' and expand it into a single, high-density 'Unified Investment Dossier' specifically for **{found_name}**.
+        
+        STEP 1: Identify the name of the startup from this report: {missing_info_list}
+        STEP 2: Expand it into a single, high-density 'Unified Investment Dossier'.
 
         ### 📂 BASE CONTEXT (FROM MANAGER):
         {missing_info_list} 
 
         ### 🎯 YOUR MISSION:
-        1. **Identity & Data Integration:** Confirm **{found_name}** as the target.
+        1. **Identity & Data Integration:** Confirm the identified startup as the target.
         2. **Web Research (Dynamic Target Lock):** Use 'web_search_tool'. 
-            - 🛑 **CRITICAL:** You are researching **{found_name}** specifically in the **[Identify Industry]** space. 
+            - 🛑 **CRITICAL:** You are researching the target specifically in its identified industry space. 
             - DO NOT pull data for companies with the same name in different industries. 
-            - For every search query, append the industry name to the company name (e.g., "{found_name} [Industry] funding").
+            - For every search query, append the industry name to the company name (e.g., "[Company Name] [Industry] funding").
             - Find: Founder backgrounds, recent 2025-2026 funding, valuation, and exact headcount.
         3. **Growth Signal Audit:** Use 'hiring_pulse_tool' to see if they are actually growing. 
                 - Look at the snippets: If you see "20+ jobs", mark hiring_status as 'Aggressive'.
@@ -96,10 +87,9 @@ async def researcher_agent(missing_info_list):
         
         5. 🕵️ **MANDATORY VIBE CHECK (The "Shadow Search"):**
         You MUST perform a deep-dive into community sentiment for the **specific industry product** mentioned above.
-        - **Primary Search:** Use site:reddit.com "{found_name}" + [identified industry] + review OR bug.
-        - **Secondary Search:** Search `"{found_name} [Industry] reviews" OR "{found_name} [Industry] scam"`.
-        - **Verification:** If the search results describe a product that does NOT match the startup's purpose (e.g. you find a music app but the target is a dating app), DISCARD THEM.
-
+        - **Primary Search:** Use site:reddit.com "[Company Name]" + [identified industry] + review OR bug.
+        - **Secondary Search:** Search `"[Company Name] [Industry] reviews" OR "[Company Name] [Industry] scam"`.
+        - **Verification:** If the search results describe a product that does NOT match the startup's purpose, DISCARD THEM.
 
         ### 🧱 VII. RAW DATA BLOCK (FOR SYSTEM PARSING)
         You MUST provide the final data as a single JSON code block. 
@@ -124,115 +114,50 @@ async def researcher_agent(missing_info_list):
             }}
         }}
         MANDATORY: Return ONLY the JSON inside the code block for this section. Use 0.0 for missing numbers.
-    
-        NOTE: If you find multiple sources, use the most recent or reliable one (e.g., Crunchbase, Reuters, or Official Company Site).
     """
-    
 
-
-    # -------------------------------
-    # 🧠 HELPER: JSON EXTRACTOR
-    # -------------------------------
-    def extract_json(content: str):
-        try:
-            # 1. Try proper markdown JSON block
-            match = re.search(r"```json\s*(.*?)\s*```", content, re.DOTALL)
-            if match:
-                return json.loads(match.group(1))
-
-            # 2. Fallback: any JSON-like object
-            match = re.search(r"\{.*\}", content, re.DOTALL)
-            if match:
-                return json.loads(match.group(0))
-
-        except Exception:
-            return None
-
-        return None
-
-
-    # -------------------------------
-    # 🚀 REFLECTION LOOP (FIXED)
-    # -------------------------------
-    response = None
+    # --- 3. REFLECTION LOOP ---
     content = ""
     data = None
-    ref_wait_time = 20
-
+    
     for reflection_attempt in range(2):
-        await asyncio.sleep(ref_wait_time)
-        ref_wait_time = ref_wait_time + 10
-        logger.info(f"📡 Researcher Attempt {reflection_attempt + 1}...")
+        logger.info(f"📡 Researcher Execution (Attempt {reflection_attempt + 1})...")
+        
+        try:
+            # FIXED: Sending 'full_prompt'
+            response = chat.send_message(full_prompt)
+            content = response.text
+            
+            # Extract JSON
+            json_match = re.search(r"```json\s*(.*?)\s*```", content, re.DOTALL)
+            raw_json = json_match.group(1) if json_match else re.search(r"\{.*\}", content, re.DOTALL).group(0)
+            data = json.loads(raw_json)
 
-        response = chat.send_message(prompt)
-        content = response.text
+            if data and data.get("company_name") and data.get("company_name") != "Pending":
+                logger.info(f"✅ Quality Research Obtained for {data['company_name']}")
+                break
+        
+        except Exception as e:
+            logger.warning(f"⚠️ Reflection {reflection_attempt + 1} failed: {e}")
+            if reflection_attempt == 0:
+                full_prompt += "\n\n🚨 ERROR: Your previous response lacked valid JSON. Please provide the JSON block in Section VII."
+            continue
 
-        data = extract_json(content)
-
-        # ✅ QUALITY CHECK (REAL SYSTEM)
-        if data:
-            try:
-                validated = StartupState.model_validate(data)
-
-                # Optional stronger check
-                if validated.total_funding > 0:
-                    print("✅ Valid structured data found")
-                    break
-
-            except Exception as e:
-                print(f"⚠️ Validation failed: {e}")
-
-        # 🔁 Reflection retry
-        if reflection_attempt == 0:
-            logger.warning("⚠️ Reflection: Invalid or missing structured data. Retrying...")
-
-            prompt += f"""
-
-    🚨 REFLECTION FEEDBACK:
-    Your previous response was invalid.
-
-    FIX:
-    - Return ONLY valid JSON
-    - Ensure 'total_funding' is correct and NOT 0
-    - Ensure company_name and industry are filled
-    """
-        else:
-            logger.warning("⚠️ Reflection failed twice. Continuing with best effort.")
-
-
-    # -------------------------------
-    # 🏗️ STATE CREATION
-    # -------------------------------
+    # --- 4. STATE ASSEMBLY ---
+    found_name = data.get("company_name", "Unknown") if data else "Unknown"
+    
     state = StartupState(
         company_name=found_name,
-        industry="Identified in Dossier",
+        industry=data.get("industry", "Identified in Dossier") if data else "Identified in Dossier",
         manager_notes=content
     )
 
-
-    # -------------------------------
-    # 🧱 STRUCTURED DATA PARSING
-    # -------------------------------
-    try:
-        if data:
+    if data:
+        try:
             state = StartupState.model_validate({**state.model_dump(), **data})
-
             if "sources" in data:
                 state.sources.update(data["sources"])
+        except Exception as e:
+            logger.error(f"⚠️ Validation Error: {e}")
 
-            logger.info(f"✅ Structured Data Applied for {state.company_name}")
-        else:
-            logger.warning("⚠️ No valid JSON found. Using raw text only.")
-
-    except Exception as e:
-        logger.error(f"⚠️ Final Parsing Error: {e}")
-
-
-    # -------------------------------
-    # 🚀 RETURN
-    # -------------------------------
     return state
-
-
-
-

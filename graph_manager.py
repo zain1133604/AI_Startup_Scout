@@ -139,22 +139,23 @@ def validate_research_quality(state: ScoutState) -> Literal["analyst", "research
     s = state["startup"]
     retries = state["retry_stats"].get("researcher", 0)
 
-    if not s.company_name or s.company_name == "Pending":
-        if retries < 2:
+    # LEVEL 1: Critical Failure (No name found at all)
+    if not s.company_name or s.company_name in ["Pending", "Unknown"]:
+        if retries < 1: # Only retry once to save API quota
+            logger.warning("🔄 Router: No company found. Retrying research...")
             return "researcher"
         return "__end__"
 
-    weak_data = (
-        s.total_funding == 0 and
-        s.annual_revenue == 0 and
-        s.headcount == 0
-    )
+    # LEVEL 2: Data Completeness
+    # We only retry if EVERYTHING is zero. If we found even ONE piece of data, 
+    # we move to the analyst. This prevents looping on bootstrapped startups.
+    has_some_data = (s.total_funding > 0 or s.annual_revenue > 0 or s.headcount > 0)
+    
+    if not has_some_data and retries < 1:
+        logger.warning(f"🔄 Router: Data for {s.company_name} is thin. Trying one more time...")
+        return "researcher"
 
-    if weak_data:
-        if retries < 2:
-            return "researcher"
-        return "analyst"
-
+    # If we have a name and some data (or we've already retried), move to Analyst
     return "analyst"
 
 # --- 🏗️ ARCHITECTURE ---
