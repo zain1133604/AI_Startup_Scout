@@ -134,30 +134,47 @@ async def critic_node(state: ScoutState) -> Dict[str, Any]:
     return {"startup": updated_startup, "trace": [trace_entry]}
 
 # --- 🚦 ROUTER ---
-
 def validate_research_quality(state: ScoutState) -> Literal["analyst", "researcher", "__end__"]:
+    """
+    Professional Router: Optimizes for the 20-request/day Free Tier limit.
+    Prioritizes 'moving forward' over 'perfect data' to prevent quota exhaustion.
+    """
     s = state["startup"]
-    retries = state["retry_stats"].get("researcher", 0)
+    # Tracking retries is good, but we must be extremely stingy
+    retries = state.get("retry_stats", {}).get("researcher", 0)
 
-    # LEVEL 1: Critical Failure (No name found at all)
-    if not s.company_name or s.company_name in ["Pending", "Unknown"]:
-        if retries < 1: # Only retry once to save API quota
-            logger.warning("🔄 Router: No company found. Retrying research...")
+    # --- LEVEL 1: NAME CHECK ---
+    # If we don't even have a name, we can't do anything.
+    if not s.company_name or s.company_name in ["Pending", "Unknown", ""]:
+        # Only retry if it's the absolute FIRST attempt.
+        if retries < 1:
+            logger.warning(f"🕵️ Target missing. Attempting one-time recovery...")
             return "researcher"
+        
+        # If still no name after 1 retry, stop the graph to save remaining quota.
+        logger.error("🛑 Unrecoverable: No startup identified. Ending flow.")
         return "__end__"
 
-    # LEVEL 2: Data Completeness
-    # We only retry if EVERYTHING is zero. If we found even ONE piece of data, 
-    # we move to the analyst. This prevents looping on bootstrapped startups.
-    has_some_data = (s.total_funding > 0 or s.annual_revenue > 0 or s.headcount > 0)
+    # --- LEVEL 2: DATA SUFFICIENCY (Free Tier Logic) ---
+    # In the Free Tier, 'Thin Data' is better than 'No Quota'.
+    # We check if the research was a total 'blackout'.
+    has_basic_metrics = (s.total_funding > 0 or s.annual_revenue > 0 or s.headcount > 0)
     
-    if not has_some_data and retries < 1:
-        logger.warning(f"🔄 Router: Data for {s.company_name} is thin. Trying one more time...")
-        return "researcher"
+    if not has_basic_metrics:
+        # PROFESSIONAL LOGIC: We only retry if we have ZERO metrics AND ZERO retries.
+        # But honestly, for a 20req/day limit, it's safer to just move to Analyst.
+        if retries < 1:
+            logger.info(f"🛰️ Data for {s.company_name} is minimal. Attempting one deep-dive retry...")
+            return "researcher"
+        
+        # If it's already been retried, or we want to be safe, move to Analyst.
+        # The Analyst is smart enough to explain 'why' data might be missing.
+        logger.warning(f"⚠️ Moving to Analysis with limited data for {s.company_name}.")
+        return "analyst"
 
-    # If we have a name and some data (or we've already retried), move to Analyst
+    # --- LEVEL 3: SUCCESS PATH ---
+    # If we have a name and at least one metric, go straight to Analyst.
     return "analyst"
-
 # --- 🏗️ ARCHITECTURE ---
 
 def build_elite_scout_graph():
