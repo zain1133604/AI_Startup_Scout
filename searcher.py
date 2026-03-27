@@ -129,10 +129,21 @@ async def researcher_agent(missing_info_list):
             response = chat.send_message(full_prompt)
             content = response.text
             
-            # Extract JSON
+            # Extract JSON safely
             json_match = re.search(r"```json\s*(.*?)\s*```", content, re.DOTALL)
-            raw_json = json_match.group(1) if json_match else re.search(r"\{.*\}", content, re.DOTALL).group(0)
-            data = json.loads(raw_json)
+            
+            if json_match:
+                raw_json = json_match.group(1)
+            else:
+                # Fallback: Look for anything between curly braces
+                fallback_match = re.search(r"\{.*\}", content, re.DOTALL)
+                raw_json = fallback_match.group(0) if fallback_match else "{}"
+
+            try:
+                data = json.loads(raw_json)
+            except json.JSONDecodeError:
+                logger.error("Failed to decode JSON from Gemini response.")
+                data = {}
 
             if data and data.get("company_name") and data.get("company_name") != "Pending":
                 logger.info(f"✅ Quality Research Obtained for {data['company_name']}")
@@ -140,17 +151,18 @@ async def researcher_agent(missing_info_list):
         
         except Exception as e:
                     logger.warning(f"⚠️ Reflection {reflection_attempt + 1} failed: {e}")
-                    # If it's a Quota error, don't just "continue", wait or exit
-                    if "429" in str(e) or "resource_exhausted" in str(e).lower():
-                        # Force a "failed" state that the Manager can read
+                    
+                    # Check for Quota/Rate limits in the error string
+                    error_str = str(e).lower()
+                    if any(x in error_str for x in ["429", "resource_exhausted", "quota"]):
                         return StartupState(
                             company_name="Pending", 
-                            manager_notes="CRITICAL_QUOTA_ERROR: Gemini API is exhausted."
+                            manager_notes="CRITICAL_QUOTA_ERROR: Search tool or API exhausted."
                         )
                     
                     if reflection_attempt == 0:
-                        full_prompt += "\n\n🚨 ERROR: Your previous response lacked valid JSON."
-                    continue
+                        full_prompt += "\n\n🚨 ERROR: Your previous response was invalid. Please ensure you provide the Section VII JSON block."
+                        continue
 
     # --- 4. STATE ASSEMBLY ---
     found_name = data.get("company_name", "Unknown") if data else "Unknown"
