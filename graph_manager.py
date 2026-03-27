@@ -136,18 +136,23 @@ async def critic_node(state: ScoutState) -> Dict[str, Any]:
 def validate_research_quality(state: ScoutState) -> Literal["analyst", "researcher", "__end__"]:
     s = state["startup"]
     retries = state.get("retry_stats", {}).get("researcher", 0)
+    
+    # 1. Check for API Exhaustion (Look for the 429 error in logs/state)
+    if state.get("error_log") and "429" in str(state["error_log"][-1]):
+        logger.error("🛑 Quota hit. Moving to Analyst with 'Best Effort' data.")
+        return "analyst" 
 
-    # NEW: Check if the last action was a Quota Error
-    # (You'll need to set this flag in your researcher node)
-    if state.get("error_type") == "QUOTA_EXHAUSTED":
-        logger.error("🚫 Quota Exhausted. Stopping graph to prevent loop.")
-        return "__end__"
-
-    # LEVEL 1: Critical Failure
+    # 2. Level 1: No Name = Total Failure
     if not s.company_name or s.company_name in ["Pending", "Unknown"]:
-        if retries < 1: 
-            return "researcher"
-        return "__end__" # HARD STOP: Don't let it loop if it's already failed once
+        return "researcher" if retries < 1 else "__end__"
+
+    # 3. Level 2: Thin Data
+    has_metrics = (s.total_funding > 0 or s.annual_revenue > 0)
+    if not has_metrics and retries < 1:
+        # Before retrying, add a tiny sleep to let the Per-Minute quota reset
+        import time
+        time.sleep(2) 
+        return "researcher"
 
     return "analyst"
 # --- 🏗️ ARCHITECTURE ---

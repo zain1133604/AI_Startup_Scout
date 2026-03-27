@@ -122,6 +122,7 @@ async def researcher_agent(missing_info_list):
     
     for reflection_attempt in range(2):
         logger.info(f"📡 Researcher Execution (Attempt {reflection_attempt + 1})...")
+        asyncio.sleep(30)
         
         try:
             # FIXED: Sending 'full_prompt'
