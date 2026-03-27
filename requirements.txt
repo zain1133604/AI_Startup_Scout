@@ -9,6 +9,7 @@ tavily-python>=0.7.20
 llama-parse==0.6.94
 pydantic==2.11.7
 nest-asyncio==1.6.0
-gradio==4.44.1
+gradio>=5.0.0
 PyPDF2==3.0.1
 aiohttp==3.10.11
+websockets>=13.0.0
