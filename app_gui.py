@@ -10,13 +10,14 @@ logger = logging.getLogger("Scout.GUI")
 
 async def scout_ui_bridge(pdf_file, mode):
     if not pdf_file:
-        return {"error": "No file uploaded"}, [], None
+        return {"error": "No file uploaded"}, [], gr.update(value=None, visible=False)
+
     try:
         text = await text_extractor(pdf_file.name)
         if not text:
-            return {"error": "PDF extraction failed"}, [], None
+            return {"error": "PDF extraction failed"}, [], gr.update(value=None, visible=False)
     except Exception as e:
-        return {"error": f"Extraction failed: {str(e)}"}, [], None
+        return {"error": f"Extraction failed: {str(e)}"}, [], gr.update(value=None, visible=False)
 
     try:
         result = await run_scout_workflow(text, mode)
@@ -24,34 +25,26 @@ async def scout_ui_bridge(pdf_file, mode):
         output_dict = startup_data.model_dump() if hasattr(startup_data, "model_dump") else startup_data
 
         # Generate PDF report
-        report_path = None
         try:
             company = output_dict.get("company_name", "report").replace(" ", "_")
             report_dir = "reports"
             os.makedirs(report_dir, exist_ok=True)
-            report_path = os.path.join(report_dir,f"scout_{company}.pdf")
+            report_path = os.path.join(report_dir, f"scout_{company}.pdf")
             generate_report(startup_data, report_path)
             logger.info(f"✅ PDF generated at {report_path}")
-            # Verify it actually exists
-            if not os.path.exists(report_path):
-                logger.error("❌ PDF file not found after generation!")
-                report_path = None
         except Exception as e:
             logger.error(f"❌ PDF generation failed: {e}")
             report_path = None
-        logger.info(f"📁 Returning report path: {report_path}")
 
-
-        filename = f"scout_{company}.pdf"
-
+        # Return gr.File.update to dynamically show the file
         return (
             output_dict,
             result.get("trace", []),
-            report_path   # ✅ just return path, NOT bytes
+            gr.update(value=report_path, visible=True)
         )
-    except Exception as e:
-        return {"error": f"Workflow failed: {str(e)}"}, [], None
 
+    except Exception as e:
+        return {"error": f"Workflow failed: {str(e)}"}, [], gr.update(value=None, visible=False)
 # --- 🎨 THE UI DESIGN ---
 with gr.Blocks(
     delete_cache=(60, 3600),
