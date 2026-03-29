@@ -103,12 +103,15 @@ async def researcher_agent(missing_info_list, raw_deck_text=None, confirmed_comp
         "open_roles": <integer, count from hiring tool>,
         "vibe_score": <float 1.0-10.0>,
         "community_sentiment": "one sentence summary",
+        "website": "https://their-actual-domain.com or Unknown",
+        "moat_description": "2-3 sentence description of their competitive advantage",
         "founders": [
             {{"name": "Full Name", "role": "CEO", "bio": "2 sentence bio", "linkedin": "url or Not Found"}}
         ],
         "competitors": [
             {{"name": "Company", "description": "what they do", "threat_level": "High|Medium|Low"}}
         ],
+       
         "funding_history": [
             {{"round_name": "Series A", "amount": 25.0, "date": "April 2025"}}
         ],
@@ -192,6 +195,8 @@ SELF-CHECK before finishing:
             state.founders = data.get("founders", [])
             state.competitors = data.get("competitors", [])
             state.headcount = data.get("headcount", 0)
+            state.moat_description = data.get("moat_description", "")
+            state.website = data.get("website", None)
             
             # Then validate the rest
             state = StartupState.model_validate({**state.model_dump(), **data})
