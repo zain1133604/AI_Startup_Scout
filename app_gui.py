@@ -40,7 +40,10 @@ async def scout_ui_bridge(pdf_file, mode):
             logger.error(f"❌ PDF generation failed: {e}")
             report_path = None
         logger.info(f"📁 Returning report path: {report_path}")
-        return output_dict, result.get("trace", []), [report_path]
+        with open(report_path, "rb") as f:
+            file_bytes = f.read()
+
+        return output_dict, result.get("trace", []), file_bytes
     except Exception as e:
         return {"error": f"Workflow failed: {str(e)}"}, [], None
 
@@ -60,7 +63,7 @@ with gr.Blocks(
             report_file = gr.File(
                 label="📄 Download PDF Report",
                 file_count="single",
-                type="filepath",
+                type="binary",
                 interactive=False
             )
 
@@ -91,5 +94,5 @@ if __name__ == "__main__":
         server_name="0.0.0.0",
         server_port=int(os.environ.get("PORT", 7860)),
         theme=gr.themes.Soft(primary_hue="blue", secondary_hue="slate"),
-        allowed_paths=["reports"]  # ← THIS is the key fix — allows Gradio to serve /tmp files
+          # ← THIS is the key fix — allows Gradio to serve /tmp files
     )
