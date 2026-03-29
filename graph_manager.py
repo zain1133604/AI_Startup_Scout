@@ -28,23 +28,6 @@ class ScoutState(TypedDict):
     error_log: List[str]
     trace: List[Dict[str, Any]]  # for keeping node traces
 
-# --- HELPER FUNCTIONS FOR COMPANY EXTRACTION ---
-def extract_company_name(summary: str):
-    match = re.search(r"COMPANY_NAME:\s*(.+)", summary, re.IGNORECASE)
-    if match:
-        return match.group(1).strip()
-    patterns = [r"Company Name[:\-\s]+(.+)", r"Startup Name[:\-\s]+(.+)"]
-    for pattern in patterns:
-        match = re.search(pattern, summary, re.IGNORECASE)
-        if match:
-            return match.group(1).strip()
-    # fallback: first line with reasonable length
-    lines = [l.strip() for l in summary.split("\n") if l.strip()]
-    for line in lines[:10]:
-        if re.match(r"^[A-Z][A-Za-z0-9&\-\s]{2,50}$", line):
-            return line
-    return None
-
 def smart_extract_from_raw(raw_text: str):
     lines = [l.strip() for l in raw_text.split("\n") if l.strip()]
     bad_keywords = ["pitch deck", "confidential", "series", "seed", "presentation", "overview", "business plan"]
@@ -58,26 +41,84 @@ def smart_extract_from_raw(raw_text: str):
             return line
     return None
 
-# --- NODE IMPLEMENTATIONS ---
+# Expanded reject list — add any company names you keep seeing incorrectly grabbed
+REJECT_NAMES = {
+    "unknown", "pending", "pitch deck", "confidential", "presentation",
+    "overview", "business plan", "series", "seed", "inc", "llc", "ltd",
+    "klickly", "introduction", "agenda", "appendix", "summary", "table",
+    "contents", "disclaimer", "proprietary", "investors", "investment"
+}
+
+def extract_company_name(summary: str):
+    # Step 1: Trust the explicit COMPANY_NAME tag first (most reliable)
+    match = re.search(r"COMPANY_NAME:\s*(.+)", summary, re.IGNORECASE)
+    if match:
+        name = match.group(1).strip()
+        if name.lower() not in REJECT_NAMES and len(name) > 2:
+            return name
+
+    # Step 2: Try pattern-based extraction
+    patterns = [
+        r"Company Name[:\-\s]+(.+)",
+        r"Startup Name[:\-\s]+(.+)",
+        r"Company[:\-\s]+([A-Z][A-Za-z0-9&\-\s]{2,50})",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, summary, re.IGNORECASE)
+        if match:
+            name = match.group(1).strip()
+            if name.lower() not in REJECT_NAMES and len(name) > 2:
+                return name
+
+    # Step 3: Fallback — scan first 10 non-empty lines of summary
+    lines = [l.strip() for l in summary.split("\n") if l.strip()]
+    for line in lines[:10]:
+        # Must start with capital, reasonable length, not in reject list
+        if (re.match(r"^[A-Z][A-Za-z0-9&\-\s]{2,50}$", line)
+                and line.lower() not in REJECT_NAMES
+                and not line.startswith("**")   # skip markdown bold headers
+                and len(line.split()) <= 5):     # company names are rarely 6+ words
+            return line
+
+    return None
+
+
 async def summarizer_node(state: ScoutState) -> ScoutState:
     logger.info("Node: Summarizer | Analyzing pitch deck...")
-    summary = await sumarizer(state["raw_deck_text"])
+
+    # Focus on cover page (first 3000 chars) + team slide (last 1000 chars)
+    # This prevents client/case-study names from polluting the summary
+    raw = state["raw_deck_text"]
+    focused_text = raw[:3000] + "\n...[middle omitted]...\n" + raw[-1000:]
+
+    summary = await sumarizer(focused_text)
     state["startup"].manager_notes = summary or ""
-    
+
+    # Try extracting from summary first
     found_name = extract_company_name(summary)
-    if not found_name or found_name.lower() in ["unknown", "pending", ""]:
-        found_name = smart_extract_from_raw(state["raw_deck_text"])
-    
-    bad_names = ["unknown", "pending", "pitch deck", "confidential"]
-    state["startup"].company_name = found_name if found_name and found_name.lower() not in bad_names else "Pending"
-    
+
+    # If summary failed, fall back to raw cover page text only (first 1500 chars)
+    if not found_name or found_name.lower() in REJECT_NAMES:
+        logger.warning("⚠️ Summary extraction failed, falling back to raw cover text...")
+        found_name = smart_extract_from_raw(raw[:1500])  # cover page only
+
+    # Final validation
+    if found_name and found_name.lower() not in REJECT_NAMES:
+        state["startup"].company_name = found_name
+    else:
+        logger.error("❌ Could not determine company name. Setting to Pending.")
+        state["startup"].company_name = "Pending"
+
     # Add trace
     state["trace"].append({
         "node": "summarizer",
-        "status": "success",
+        "status": "success" if state["startup"].company_name != "Pending" else "name_extraction_failed",
+        "company_found": state["startup"].company_name,
         "timestamp": datetime.now().strftime("%H:%M:%S")
     })
-    
+
+    logger.info(f"🎯 Summarizer set company: {state['startup'].company_name}")
+    return state
     logger.info(f"🎯 Summarizer set company: {state['startup'].company_name}")
     return state
 

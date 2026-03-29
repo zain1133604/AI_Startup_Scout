@@ -18,31 +18,34 @@ async def sumarizer(pitch_deck_text):
     client = genai.Client(api_key=os.environ.get("GEMINI_KEY"))
     logger.info("\n👔 Summarizer is analyzing the briefing...")
 
-    prompt =f"""
-    You are a Senior Investment Analyst. Read this extracted pitch deck text and provide a structured report.
-    
+    prompt = f"""
+    You are a Senior Investment Analyst. Read this extracted pitch deck text carefully.
+
+    ⚠️ CRITICAL RULE: The company presenting this pitch deck is the OWNER of this deck.
+    - It is the company asking for investment
+    - It is NOT a client, case study, partner, or competitor mentioned in the deck
+    - It is usually mentioned on the FIRST page / cover slide
+
     TASKS:
-    1. **Company Name**: Identify the startup's name.
-    2. **Founders**: List the names of the founding team and there education.
-    3. **Valuation/Ask**: Identify the current valuation (if mentioned) or the "Ask" (how much money they are trying to raise).
-    4. **Margins & Projections**: 
-       - What are their current margins (Gross/Net)?
-       - What are their projected future margins or revenue targets?
-    5. **Moat** "What is their unfair advantage? Why can't a big company clone them tomorrow?"
-    6. **Spendings** "Look for what is their current 'Burn Rate' (how much they spend per month)?"
-    7. **Executive Summary**: A concise 2-sentence summary of their value proposition.
+    1. **Company Name**: The startup that CREATED and is PRESENTING this deck.
+    - Look at the very first lines of the text — cover page is usually there
+    - If multiple company names appear, the PRESENTER is the one asking for funding
+    - DO NOT pick a client name, case study company, or example brand
 
+    2. **Founders**: Names of the founding team and their education.
+    3. **Valuation/Ask**: Current valuation or funding ask amount.
+    4. **Margins & Projections**: Current and projected margins/revenue.
+    5. **Moat**: Their unfair advantage.
+    6. **Spendings**: Monthly burn rate.
+    7. **Executive Summary**: 2-sentence value proposition.
 
-    PITCH DECK DATA:
-    {pitch_deck_text} 
-    note: IMPORTANT: At the very end of your response, provide a section called 'MISSING_DATA_LIST' 
-    containing only a bulleted list of things you couldn't find (e.g., - Founder names, - Burn rate).
+    PITCH DECK DATA (first part is usually the cover/title):
+    {pitch_deck_text}
 
-    IMPORTANT:
-    Return the company name STRICTLY in this format:
+    IMPORTANT: At the very end, provide 'MISSING_DATA_LIST' with bulleted missing items.
 
+    IMPORTANT: Return company name STRICTLY in this format on its own line:
     COMPANY_NAME: <name here>
-
     """
     # Note: We only send first 5000 chars to save tokens for now.
 
