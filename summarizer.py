@@ -38,6 +38,11 @@ async def sumarizer(pitch_deck_text):
     note: IMPORTANT: At the very end of your response, provide a section called 'MISSING_DATA_LIST' 
     containing only a bulleted list of things you couldn't find (e.g., - Founder names, - Burn rate).
 
+    IMPORTANT:
+    Return the company name STRICTLY in this format:
+
+    COMPANY_NAME: <name here>
+
     """
     # Note: We only send first 5000 chars to save tokens for now.
 

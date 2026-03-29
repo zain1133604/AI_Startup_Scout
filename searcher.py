@@ -114,6 +114,8 @@ async def researcher_agent(missing_info_list, raw_deck_text=None):
             }}
         }}
         MANDATORY: Return ONLY the JSON inside the code block for this section. Use 0.0 for missing numbers.
+
+        important note: If missing_info_list is insufficient, use raw_deck_text.
     """
 
     # --- 3. REFLECTION LOOP ---

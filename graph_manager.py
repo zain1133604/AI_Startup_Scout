@@ -3,6 +3,8 @@ import logging
 import operator
 from datetime import datetime
 from typing import Dict, Any, TypedDict, Literal, List, Annotated
+import re
+
 
 from langgraph.graph import StateGraph, END
 
@@ -28,45 +30,101 @@ class ScoutState(TypedDict):
     error_log: Annotated[List[str], operator.add]
     trace: Annotated[List[Dict[str, Any]], operator.add]
 
-# --- ⚡ NODE IMPLEMENTATIONS ---
 
+
+# --- 🧠 SMART NAME EXTRACTION ---
+def extract_company_name(summary: str):
+    """
+    Extracts company name using:
+    1. Structured LLM output (COMPANY_NAME:)
+    2. Regex patterns
+    3. Title-style detection
+    """
+
+    # ✅ 1. BEST: Structured extraction
+    match = re.search(r"COMPANY_NAME:\s*(.+)", summary, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+
+    # ✅ 2. Regex patterns
+    patterns = [
+        r"Company Name[:\-\s]+(.+)",
+        r"Startup Name[:\-\s]+(.+)",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, summary, re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+
+    # ✅ 3. Title-style fallback (clean headings)
+    lines = [l.strip() for l in summary.split("\n") if l.strip()]
+    for line in lines[:10]:
+        if re.match(r"^[A-Z][A-Za-z0-9&\-\s]{2,50}$", line):
+            return line
+
+    return None
+
+
+# --- 🧠 SMART RAW TEXT FALLBACK ---
+def smart_extract_from_raw(raw_text: str):
+    """
+    Extracts company name from raw pitch deck text
+    while filtering out garbage like 'Pitch Deck', 'Confidential'
+    """
+
+    lines = [l.strip() for l in raw_text.split("\n") if l.strip()]
+
+    bad_keywords = [
+        "pitch deck", "confidential", "series", "seed",
+        "presentation", "overview", "business plan"
+    ]
+
+    candidates = []
+
+    for line in lines[:15]:
+        clean = line.lower()
+
+        # ❌ Skip garbage
+        if any(bad in clean for bad in bad_keywords):
+            continue
+
+        # ❌ Skip long sentences
+        if len(line) > 60:
+            continue
+
+        # ✅ Prefer title-like lines
+        if re.match(r"^[A-Z][A-Za-z0-9&\-\s]{2,50}$", line):
+            candidates.append(line)
+
+    return candidates[0] if candidates else None
+
+
+# --- ⚡ SUMMARIZER NODE ---
 async def summarizer_node(state: ScoutState) -> Dict[str, Any]:
     logger.info("Node: Summarizer | Analyzing pitch deck...")
+
     summary = await sumarizer(state["raw_deck_text"])
-    
+
     startup_obj = state["startup"]
     startup_obj.manager_notes = summary or ""
-    
-    # --- 🛠️ ROBUST EXTRACTION LOGIC ---
-    import re
-    
-    # 1. Try to find the name after common labels, ignoring markdown asterisks
-    # This pattern looks for "Company Name:" or "Startup Name:" and ignores any surrounding **
-    name_pattern = r"(?:Company Name|Startup Name):\s*\*?\*?([^*|\n#]+)\*?\*?"
-    name_match = re.search(name_pattern, summary, re.IGNORECASE)
-    
-    found_name = None
-    
-    if name_match:
-        # Clean up any trailing whitespace or punctuation
-        found_name = name_match.group(1).strip().rstrip(':').strip()
-    
-    # 2. FALLBACK: If regex didn't find a label, check if the first line is the name
-    # (LLMs often put the title on the first line)
-    if not found_name or found_name.lower() in ["unknown", "pending", ""]:
-        lines = [l for l in summary.split('\n') if l.strip()]
-        if lines:
-            first_line = lines[0].replace('*', '').replace('#', '').strip()
-            # Only use it if it's reasonably short (company names aren't usually long sentences)
-            if len(first_line) < 60:
-                found_name = first_line
 
-    # 3. Apply the name if we found something valid
-    if found_name:
+    # ✅ STEP 1: Extract from summary
+    found_name = extract_company_name(summary)
+
+    # ✅ STEP 2: Smart fallback from raw text
+    if not found_name or found_name.lower() in ["unknown", "pending", ""]:
+        found_name = smart_extract_from_raw(state["raw_deck_text"])
+
+    # ✅ STEP 3: Final validation (STRICT)
+    bad_names = ["unknown", "pending", "pitch deck", "confidential"]
+
+    if found_name and found_name.lower() not in bad_names:
         startup_obj.company_name = found_name
         logger.info(f"🎯 Summarizer identified company: {found_name}")
     else:
-        logger.warning("⚠️ Summarizer failed to extract a specific company name.")
+        logger.error(f"❌ CRITICAL: Invalid company name detected: {found_name}")
+        raise ValueError("CRITICAL: Valid company name not found from summarizer")
 
     trace_entry = {
         "node": "summarizer",
@@ -75,8 +133,10 @@ async def summarizer_node(state: ScoutState) -> Dict[str, Any]:
         "status": "Success",
         "timestamp": datetime.now().strftime("%H:%M:%S")
     }
-    
+
     return {"startup": startup_obj, "trace": [trace_entry]}
+
+
 
 async def primary_research_node(state: ScoutState) -> Dict[str, Any]:
     # 1. Get current retries
@@ -88,7 +148,7 @@ async def primary_research_node(state: ScoutState) -> Dict[str, Any]:
     
     try:
         # Pass the notes to the agent
-        updated_startup = await researcher_agent(state["startup"].manager_notes)
+        updated_startup = await researcher_agent(state["startup"].manager_notes,raw_deck_text=state["raw_deck_text"])
         
         # FIX: We MUST increment the counter even on 'Success' (which might be a 'Pending' success)
         # because the router needs to know this attempt is OVER.
