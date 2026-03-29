@@ -119,8 +119,6 @@ async def summarizer_node(state: ScoutState) -> ScoutState:
 
     logger.info(f"🎯 Summarizer set company: {state['startup'].company_name}")
     return state
-    logger.info(f"🎯 Summarizer set company: {state['startup'].company_name}")
-    return state
 
 async def primary_research_node(state: ScoutState) -> ScoutState:
     retries = state["retry_stats"].get("researcher", 0)
