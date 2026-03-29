@@ -85,7 +85,7 @@ async def analyst_agent(state: StartupState):
                 if state.funding_history:
                     latest_round_amount = state.funding_history[-1].amount
 
-                if state.latest_valuation <= latest_round_amount or state.latest_valuation == 0:
+                if state.latest_valuation <= 0 or state.latest_valuation <= latest_round_amount:
                     logger.info(f"⚖️ Adjusting Valuation: Reported ${state.latest_valuation}M vs Raised ${latest_round_amount}M")
                     revenue_multiple = (state.annual_revenue * 15.0) if state.annual_revenue > 0 else 0
                     funding_multiple = latest_round_amount * 5.0

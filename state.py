@@ -101,30 +101,35 @@ class StartupState(BaseModel):
             return v.lower() in ("yes", "true", "t", "1")
         return bool(v)
 
-    @field_validator('total_funding', 'latest_valuation', 'annual_revenue', mode='before')
-    @classmethod
-    def validate_financials(cls, v):
-        return parse_financial_string(v)
-
     @field_validator('founders', mode='before')
     @classmethod
     def fix_founder_list(cls, v):
         if isinstance(v, list):
-            return [{"name": item} if isinstance(item, str) else item for item in v]
+            result = []
+            for item in v:
+                if isinstance(item, str):
+                    result.append(Founder(name=item))
+                elif isinstance(item, dict):
+                    result.append(Founder(**{k: val for k, val in item.items() if k in Founder.model_fields}))
+                else:
+                    result.append(item)
+            return result
         return v
 
     @field_validator('competitors', mode='before')
     @classmethod
     def fix_competitor_list(cls, v):
         if isinstance(v, list):
-            return [{"name": item, "description": "N/A", "threat_level": "Med"} if isinstance(item, str) else item for item in v]
+            result = []
+            for item in v:
+                if isinstance(item, str):
+                    result.append(Competitor(name=item, description="N/A", threat_level="Medium"))
+                elif isinstance(item, dict):
+                    result.append(Competitor(**{k: val for k, val in item.items() if k in Competitor.model_fields}))
+                else:
+                    result.append(item)
+            return result
         return v
-    
-    @field_validator('total_funding', 'latest_valuation', 'annual_revenue', mode='before')
-    @classmethod
-    def validate_financials(cls, v):
-        result = parse_financial_string(v)
-        return 0.0 if result < 0 else result  # treat -1 sentinel as 0 in state
     
     @field_validator('open_roles', 'headcount', mode='before')
     @classmethod
@@ -133,6 +138,14 @@ class StartupState(BaseModel):
         val = max(0, val)       # remove -1 sentinels
         val = min(val, 500)     # cap at 500 — no startup has 10000 open roles
         return val
+    
+    @field_validator('total_funding', 'latest_valuation', 'annual_revenue', mode='before')
+    @classmethod
+    def validate_financials(cls, v):
+        if isinstance(v, (int, float)) and float(v) == -1.0:
+            return -1.0  # preserve -1 sentinel so analyst knows it's "unknown" not "zero"
+        result = parse_financial_string(v)
+        return result
 
     class Config:
         arbitrary_types_allowed = True
