@@ -39,7 +39,18 @@ async def analyst_agent(state: StartupState):
             )
 
             extracted = json.loads(response.choices[0].message.content)
-            updated_data = {**state.model_dump(), **extracted}
+            current = state.model_dump()
+            safe_update = {
+                k: v for k, v in extracted.items()
+                if k in current and (
+                    current[k] == 0 or
+                    current[k] == 0.0 or
+                    current[k] == "" or
+                    current[k] == [] or
+                    current[k] is None
+                )
+            }
+            updated_data = {**current, **safe_update}
             state = StartupState.model_validate(updated_data)
 
             notes_lower = state.manager_notes.lower()
