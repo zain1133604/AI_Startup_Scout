@@ -4,27 +4,37 @@ from graph_manager import run_scout_workflow
 import os
 from PyPDF2 import PdfReader
 from textextractor import text_extractor
-# app_gui.py — replace the PDF reading block with this:
+from report_generator import generate_report  # ← ADDED
+
 async def scout_ui_bridge(pdf_file, mode):
     if not pdf_file:
-        return {"error": "No file uploaded"}, []
+        return {"error": "No file uploaded"}, [], None  # ← added None
     try:
-        text = await text_extractor(pdf_file.name)  # Use LlamaParse, same as API
+        text = await text_extractor(pdf_file.name)
         if not text:
-            return {"error": "PDF extraction failed"}, []
+            return {"error": "PDF extraction failed"}, [], None  # ← added None
     except Exception as e:
-        return {"error": f"Extraction failed: {str(e)}"}, []
+        return {"error": f"Extraction failed: {str(e)}"}, [], None  # ← added None
     
     try:
         result = await run_scout_workflow(text, mode)
         startup_data = result.get("startup", {})
         output_dict = startup_data.model_dump() if hasattr(startup_data, "model_dump") else startup_data
-        return output_dict, result.get("trace", [])
+
+        # ── ADDED: Generate PDF report ──
+        try:
+            company = output_dict.get("company_name", "report").replace(" ", "_")
+            report_path = f"/tmp/scout_{company}.pdf"
+            generate_report(startup_data, report_path)
+        except Exception as e:
+            report_path = None
+        # ── END ADDED ──
+
+        return output_dict, result.get("trace", []), report_path  # ← added report_path
     except Exception as e:
-        return {"error": f"Workflow failed: {str(e)}"}, []
+        return {"error": f"Workflow failed: {str(e)}"}, [], None  # ← added None
 
 # --- 🎨 THE UI DESIGN ---
-# Added api_open=False to stop the 500 error during FastAPI mounting
 with gr.Blocks(
     theme=gr.themes.Soft(primary_hue="blue", secondary_hue="slate"), 
     delete_cache=(60, 3600),
@@ -38,6 +48,7 @@ with gr.Blocks(
             file_input = gr.File(label="Upload Pitch Deck (PDF)", file_types=[".pdf"])
             mode_input = gr.Dropdown(choices=["normal", "hard"], label="Analysis Rigor", value="normal")
             run_btn = gr.Button("🚀 Dispatch Scout Squad", variant="primary")
+            report_file = gr.File(label="📄 Download PDF Report")  # ← ADDED
             
             gr.Markdown("""
             **How it works:**
@@ -54,14 +65,12 @@ with gr.Blocks(
                 with gr.TabItem("🕵️ Execution Trace"):
                     trace_display = gr.JSON(label="Agent Timeline / Logs")
 
-    # Connect the button to the function
     run_btn.click(
         fn=scout_ui_bridge,
         inputs=[file_input, mode_input],
-        outputs=[output_json, trace_display],
-        api_name=False # CRITICAL: Disables internal API route that causes the 500 error
+        outputs=[output_json, trace_display, report_file],  # ← added report_file
+        api_name=False
     )
 
 if __name__ == "__main__":
-    # For local testing
     demo.launch(server_name="0.0.0.0", server_port=int(os.environ.get("PORT", 7860)))
