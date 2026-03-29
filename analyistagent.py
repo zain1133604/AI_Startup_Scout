@@ -3,6 +3,7 @@ import json
 import os
 from state import StartupState
 import logging
+import re
 
 logger = logging.getLogger("Scout.Analyist")
 
@@ -50,7 +51,16 @@ async def analyst_agent(state: StartupState):
                 revenue = state.annual_revenue
 
                 # 1. Monthly Burn Logic
-                monthly_burn = headcount * 15000 if headcount > 0 else 50000
+                if headcount > 0:
+                    monthly_burn = headcount * 15000
+                else:
+                    # Try to find headcount in notes as fallback
+                    headcount_match = re.search(r'headcount.*?(\d+)', notes_lower)
+                    if headcount_match:
+                        headcount = int(headcount_match.group(1))
+                        monthly_burn = headcount * 15000
+                    else:
+                        monthly_burn = 50000
                 if state.hiring_status == "Aggressive": monthly_burn *= 1.25
                 elif state.hiring_status == "Freeze": monthly_burn *= 0.85
                 if state.vibe_score < 4.0: monthly_burn *= 1.15

@@ -113,7 +113,12 @@ async def researcher_agent(missing_info_list, raw_deck_text=None, confirmed_comp
         ],
        
         "funding_history": [
-            {{"round_name": "Series A", "amount": 25.0, "date": "April 2025"}}
+            {{
+                "round_name": "Series A", 
+                "amount": 25.0, 
+                "date": "April 2025",
+                "investors": ["Glade Brook Capital", "HubSpot Ventures", "Y Combinator"]
+            }}
         ],
         "sources": {{
             "total_funding": "url",
