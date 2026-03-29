@@ -125,6 +125,12 @@ class StartupState(BaseModel):
     def validate_financials(cls, v):
         result = parse_financial_string(v)
         return 0.0 if result < 0 else result  # treat -1 sentinel as 0 in state
+    
+    @field_validator('open_roles', 'headcount', mode='before')
+    @classmethod
+    def fix_negative_counts(cls, v):
+        val = int(v) if v is not None else 0
+        return max(0, val)
 
     class Config:
         arbitrary_types_allowed = True

@@ -125,6 +125,9 @@ SELF-CHECK before finishing:
 - Did I put 0.0 anywhere? If yes, go back and check Phase 1 — was it actually mentioned?
 - Are founders/competitors arrays populated if I found them in Phase 1?
 - Is open_roles an actual count from the hiring tool?
+- founders array MUST be populated. Even if only partially known, include them.
+- If a name appears anywhere in Phase 1 as a founder/CEO/author of company blog posts, include them.
+- "Jaspar Carmichael-Jack" writing the company blog = likely founder. Include with role "Unknown" if unsure.
 """
 
     # --- 3. REFLECTION LOOP ---
