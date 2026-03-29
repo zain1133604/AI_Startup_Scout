@@ -175,9 +175,13 @@ async def researcher_agent(missing_info_list, raw_deck_text=None):
 
     if data:
         try:
+            # Explicitly map lists if they exist in the LLM's JSON
+            state.founders = data.get("founders", [])
+            state.competitors = data.get("competitors", [])
+            state.headcount = data.get("headcount", 0)
+            
+            # Then validate the rest
             state = StartupState.model_validate({**state.model_dump(), **data})
-            if "sources" in data:
-                state.sources.update(data["sources"])
         except Exception as e:
             logger.error(f"⚠️ Validation Error: {e}")
 
