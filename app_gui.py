@@ -24,7 +24,7 @@ async def scout_ui_bridge(pdf_file, mode):
         # ── ADDED: Generate PDF report ──
         try:
             company = output_dict.get("company_name", "report").replace(" ", "_")
-            report_path = f"/tmp/scout_{company}.pdf"
+           report_path = os.path.join(os.getcwd(), f"scout_{company}.pdf")
             generate_report(startup_data, report_path)
         except Exception as e:
             report_path = None
