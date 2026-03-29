@@ -46,77 +46,81 @@ async def researcher_agent(missing_info_list, raw_deck_text=None):
     # Note: I added a instruction to find the name FIRST since we removed the separate ID call.
 # We remove the separate id_check call and let the prompt handle it.
     full_prompt = f"""
-        You are a Senior Investment Researcher and Data Synthesizer. 
-        
-        STEP 1: Identify the name of the startup from this report: {missing_info_list}
-        STEP 2: Expand it into a single, high-density 'Unified Investment Dossier'.
+    You are a Senior Investment Researcher. Your job has TWO phases.
 
-        ### 📂 BASE CONTEXT (FROM MANAGER):
-        {missing_info_list} 
+    === PHASE 1: RESEARCH & NARRATIVE ===
 
-        ### 🎯 YOUR MISSION:
-        1. **Identity & Data Integration:** Confirm the identified startup as the target.
-        2. **Web Research (Dynamic Target Lock):** Use 'web_search_tool'. 
-            - 🛑 **CRITICAL:** You are researching the target specifically in its identified industry space. 
-            - DO NOT pull data for companies with the same name in different industries. 
-            - For every search query, append the industry name to the company name (e.g., "[Company Name] [Industry] funding").
-            - Find: Founder backgrounds, recent 2025-2026 funding, valuation, and exact headcount.
-        3. **Growth Signal Audit:** Use 'hiring_pulse_tool' to see if they are actually growing. 
-                - Look at the snippets: If you see "20+ jobs", mark hiring_status as 'Aggressive'.
-                - If you see "0 results" or "Closed", mark as 'Freeze'.
-        4. **Financials:** Look for ARR/Revenue and Unit Economics (CAC/Payback).
-        5. **SOURCE URL** PROVIDE THE SOURCE URL for every key metric.
+    BASE CONTEXT (from manager summary):
+    {missing_info_list}
 
-        ### 🛑 CRITICAL DATA SCHEMA (ANALYST COMPATIBILITY V4.0):
-        You MUST format these specific data points as a list of OBJECTS in Section VII. 
-        1. **Founders (Objects):** {{"name": "Full Name", "role": "CEO", "bio": "...", "linkedin": "..."}}
-        2. **Competitors (Objects):** {{"name": "...", "description": "...", "threat_level": "High/Med/Low"}}
-        3. **Funding History (Objects):** {{"round_name": "Series A", "amount": 25.0, "date": "April 2025"}}
+    STEP 1 - IDENTIFY: What is the startup's name and industry?
+    STEP 2 - WEB RESEARCH: Use web_search_tool. 
+        - SUBSIDIARY RULE: If the target is a subsidiary, research IT DIRECTLY. 
+        Do NOT switch to the parent company.
+        - Append industry to every search: "[Company Name] [Industry] funding 2025"
+        - Find: founders, funding rounds, valuation, ARR, headcount
+        - For EVERY number found, write: FACT: [value] SOURCE: [url]
 
-        ### 📝 OUTPUT STRUCTURE:
-        ## I. Gaps Filled & Executive Summary
-        ## II. Founder & Team Profiles 
-        ## III. Funding & Financials 
-        ## IV. IV. Operational Metrics (Hiring Pulse & Growth)
-        - Summarize the hiring status: How many roles are open? What departments?
-        ## V. Competitive Comparison Matrix
-        ## VI. Technology & Moat Assessment
-        ## When you find a value for funding, revenue, or headcount, you must return it in this format:
-            FACT: [The Number]
-            SOURCE: [The URL]
-        
-        5. 🕵️ **MANDATORY VIBE CHECK (The "Shadow Search"):**
-        You MUST perform a deep-dive into community sentiment for the **specific industry product** mentioned above.
-        - **Primary Search:** Use site:reddit.com "[Company Name]" + [identified industry] + review OR bug.
-        - **Secondary Search:** Search `"[Company Name] [Industry] reviews" OR "[Company Name] [Industry] scam"`.
-        - **Verification:** If the search results describe a product that does NOT match the startup's purpose, DISCARD THEM.
+    STEP 3 - HIRING PULSE: Use hiring_pulse_tool for the TARGET company name only.
+        - Count exact number of open roles from the results
+        - If 10+ jobs: "Aggressive", 1-9: "Maintain", 0: "Freeze"
 
-        ### 🧱 VII. RAW DATA BLOCK (FOR SYSTEM PARSING)
-        You MUST provide the final data as a single JSON code block. 
-        Ensure the keys match these exactly:
-        {{
-            "company_name": string,
-            "industry": string,
-            "is_public": boolean,
-            "total_funding": float,
-            "latest_valuation": float,
-            "annual_revenue": float,
-            "headcount": integer,
-            "hiring_status": "Aggressive" | "Maintain" | "Freeze",
-            "open_roles": integer,
-            "vibe_score": float,
-            "community_sentiment": string,
-            "sources": {{
-                "total_funding": "url",
-                "latest_valuation": "url",
-                "annual_revenue": "url",
-                "headcount": "url"
-            }}
+    STEP 4 - COMPETITORS: Find 3-5 direct competitors with threat levels.
+
+    STEP 5 - VIBE CHECK: Search site:reddit.com "[Company Name]" reviews
+        - Score sentiment 1-10 (1=very negative, 5=neutral, 10=very positive)
+        - If no Reddit data found, score is 5.0
+
+    ## I. Executive Summary
+    ## II. Founder Profiles  
+    ## III. Funding & Financials (with FACT/SOURCE tags)
+    ## IV. Hiring Pulse Results
+    ## V. Competitor Matrix
+    ## VI. Moat Assessment
+    ## VII. Vibe Check Results
+
+    === PHASE 2: JSON EXTRACTION ===
+
+    NOW, look back at everything you wrote above and extract the numbers into this JSON.
+    If a value was mentioned anywhere in Phase 1, it MUST appear here — not 0.0.
+    If truly unknown, use -1.0 for numbers and "Unknown" for strings.
+    NEVER use 0.0 unless the actual value is literally zero.
+    ```json
+    {{
+        "company_name": "exact name from deck",
+        "industry": "specific industry",
+        "is_public": false,
+        "total_funding": <number in millions, e.g. 46.1 for $46.1M>,
+        "latest_valuation": <number in millions>,
+        "annual_revenue": <number in millions>,
+        "headcount": <integer, exact count>,
+        "hiring_status": "Aggressive|Maintain|Freeze",
+        "open_roles": <integer, count from hiring tool>,
+        "vibe_score": <float 1.0-10.0>,
+        "community_sentiment": "one sentence summary",
+        "founders": [
+            {{"name": "Full Name", "role": "CEO", "bio": "2 sentence bio", "linkedin": "url or Not Found"}}
+        ],
+        "competitors": [
+            {{"name": "Company", "description": "what they do", "threat_level": "High|Medium|Low"}}
+        ],
+        "funding_history": [
+            {{"round_name": "Series A", "amount": 25.0, "date": "April 2025"}}
+        ],
+        "sources": {{
+            "total_funding": "url",
+            "latest_valuation": "url", 
+            "annual_revenue": "url",
+            "headcount": "url"
         }}
-        MANDATORY: Return ONLY the JSON inside the code block for this section. Use 0.0 for missing numbers.
+    }}
+    ```
 
-        important note: If missing_info_list is insufficient, use raw_deck_text.
-    """
+SELF-CHECK before finishing:
+- Did I put 0.0 anywhere? If yes, go back and check Phase 1 — was it actually mentioned?
+- Are founders/competitors arrays populated if I found them in Phase 1?
+- Is open_roles an actual count from the hiring tool?
+"""
 
     # --- 3. REFLECTION LOOP ---
     content = ""

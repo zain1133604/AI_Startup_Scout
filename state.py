@@ -119,6 +119,12 @@ class StartupState(BaseModel):
         if isinstance(v, list):
             return [{"name": item, "description": "N/A", "threat_level": "Med"} if isinstance(item, str) else item for item in v]
         return v
+    
+    @field_validator('total_funding', 'latest_valuation', 'annual_revenue', mode='before')
+    @classmethod
+    def validate_financials(cls, v):
+        result = parse_financial_string(v)
+        return 0.0 if result < 0 else result  # treat -1 sentinel as 0 in state
 
     class Config:
         arbitrary_types_allowed = True
