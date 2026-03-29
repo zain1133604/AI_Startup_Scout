@@ -37,13 +37,36 @@ async def summarizer_node(state: ScoutState) -> Dict[str, Any]:
     startup_obj = state["startup"]
     startup_obj.manager_notes = summary or ""
     
-    # NEW: Try to extract the name immediately so the Researcher doesn't have to guess
-    # Simple logic: Look for "Company Name: [Name]" in the summary
+    # --- 🛠️ ROBUST EXTRACTION LOGIC ---
     import re
-    name_match = re.search(r"Company Name:\s*([^\n]+)", summary, re.IGNORECASE)
+    
+    # 1. Try to find the name after common labels, ignoring markdown asterisks
+    # This pattern looks for "Company Name:" or "Startup Name:" and ignores any surrounding **
+    name_pattern = r"(?:Company Name|Startup Name):\s*\*?\*?([^*|\n#]+)\*?\*?"
+    name_match = re.search(name_pattern, summary, re.IGNORECASE)
+    
+    found_name = None
+    
     if name_match:
-        startup_obj.company_name = name_match.group(1).strip()
-        logger.info(f"🎯 Summarizer identified company: {startup_obj.company_name}")
+        # Clean up any trailing whitespace or punctuation
+        found_name = name_match.group(1).strip().rstrip(':').strip()
+    
+    # 2. FALLBACK: If regex didn't find a label, check if the first line is the name
+    # (LLMs often put the title on the first line)
+    if not found_name or found_name.lower() in ["unknown", "pending", ""]:
+        lines = [l for l in summary.split('\n') if l.strip()]
+        if lines:
+            first_line = lines[0].replace('*', '').replace('#', '').strip()
+            # Only use it if it's reasonably short (company names aren't usually long sentences)
+            if len(first_line) < 60:
+                found_name = first_line
+
+    # 3. Apply the name if we found something valid
+    if found_name:
+        startup_obj.company_name = found_name
+        logger.info(f"🎯 Summarizer identified company: {found_name}")
+    else:
+        logger.warning("⚠️ Summarizer failed to extract a specific company name.")
 
     trace_entry = {
         "node": "summarizer",
@@ -52,6 +75,7 @@ async def summarizer_node(state: ScoutState) -> Dict[str, Any]:
         "status": "Success",
         "timestamp": datetime.now().strftime("%H:%M:%S")
     }
+    
     return {"startup": startup_obj, "trace": [trace_entry]}
 
 async def primary_research_node(state: ScoutState) -> Dict[str, Any]:
