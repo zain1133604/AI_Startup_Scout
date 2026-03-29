@@ -92,9 +92,10 @@ async def critic_agent(state: StartupState, critic_vibe: str):
     # --- 🛡️ THE STATE SYNC ---
     # We use regex to grab the score from the text and put it back into the Python object
     try:
-        score_match = re.search(r"FINAL SCOUT SCORE:\s*(\d+\.?\d*)", verdict_text)
+        # FIX: Handle both "56.8" and "71.0 * 0.8 = 56.8" formats
+        score_match = re.search(r"FINAL SCOUT SCORE:.*?(\d+\.?\d*)\s*$", verdict_text, re.MULTILINE)
         if score_match:
-            final_score = float(score_match.group(1))
+            final_score = float(score_match.group(1))  # grabs the LAST number = final result
             state.investment_score = final_score
             logger.info(f"⚖️ Critic Final Score: {final_score}")
     except Exception as e:

@@ -29,15 +29,11 @@ def web_search_tool(query: str):
 
 
 def hiring_pulse_tool(company_name: str):
-    """
-    Checks job boards (LinkedIn, Wellfound, Indeed) to see how many 
-    open roles a company has. High role count = growth signal.
-    """
     TAVILY_KEY = os.environ.get("TAVILY_KEY")
     tavily = TavilyClient(api_key=TAVILY_KEY)
     
-    # We force the search to look at job boards only
-    query = f"site:linkedin.com/jobs/ OR site:wellfound.com '{company_name}' open roles hiring"
+    # FIX: Use quotes + "AI" to avoid generic word matches like "artisan bread"
+    query = f'"{company_name}" AI startup jobs site:linkedin.com/jobs OR site:wellfound.com'
     
     logger.info(f"🕵️  Checking Hiring Pulse for: {company_name}")
     response = tavily.search(query=query, search_depth="advanced", max_results=3)

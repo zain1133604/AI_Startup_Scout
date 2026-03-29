@@ -130,7 +130,9 @@ class StartupState(BaseModel):
     @classmethod
     def fix_negative_counts(cls, v):
         val = int(v) if v is not None else 0
-        return max(0, val)
+        val = max(0, val)       # remove -1 sentinels
+        val = min(val, 500)     # cap at 500 — no startup has 10000 open roles
+        return val
 
     class Config:
         arbitrary_types_allowed = True
