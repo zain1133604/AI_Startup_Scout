@@ -99,7 +99,9 @@ def generate_report(startup, output_path: str = "/mnt/user-data/outputs/scout_re
     """
     Generate a VC-grade PDF dossier from a StartupState object or dict.
     """
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    parent = os.path.dirname(output_path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
 
     # Accept both Pydantic model and plain dict
     if hasattr(startup, "model_dump"):

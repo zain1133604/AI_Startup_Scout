@@ -26,8 +26,9 @@ async def scout_ui_bridge(pdf_file, mode):
         # Generate PDF report
         try:
             company = output_dict.get("company_name", "report").replace(" ", "_")
-            report_path = os.path.join(os.getcwd(), f"scout_{company}.pdf")
+            report_path = f"/tmp/scout_{company}.pdf"  # simple path, no NamedTemporaryFile
             generate_report(startup_data, report_path)
+            logger.info(f"✅ PDF saved: {report_path}")
         except Exception as e:
             logger.error(f"PDF generation failed: {e}")
             report_path = None
@@ -50,7 +51,7 @@ with gr.Blocks(
             file_input = gr.File(label="Upload Pitch Deck (PDF)", file_types=[".pdf"])
             mode_input = gr.Dropdown(choices=["normal", "hard"], label="Analysis Rigor", value="normal")
             run_btn = gr.Button("🚀 Dispatch Scout Squad", variant="primary")
-            report_file = gr.File(label="📄 Download PDF Report")
+            report_file = gr.File(label="📄 Download PDF Report", )
 
             gr.Markdown("""
             **How it works:**
