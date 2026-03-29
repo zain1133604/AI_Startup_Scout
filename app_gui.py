@@ -27,7 +27,7 @@ async def scout_ui_bridge(pdf_file, mode):
         # Generate PDF report
         try:
             company = output_dict.get("company_name", "report").replace(" ", "_")
-            report_dir = "reports"
+            report_dir = os.path.abspath("reports")
             os.makedirs(report_dir, exist_ok=True)
             report_path = os.path.join(report_dir, f"scout_{company}.pdf")
             generate_report(startup_data, report_path)
@@ -45,6 +45,8 @@ async def scout_ui_bridge(pdf_file, mode):
 
     except Exception as e:
         return {"error": f"Workflow failed: {str(e)}"}, [], gr.update(value=None, visible=False)
+    
+    
 # --- 🎨 THE UI DESIGN ---
 with gr.Blocks(
     delete_cache=(60, 3600),
