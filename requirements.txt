@@ -13,3 +13,4 @@ gradio>=5.0.0
 PyPDF2==3.0.1
 aiohttp==3.10.11
 websockets>=13.0.0
+reportlab>=4.0.0
