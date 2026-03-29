@@ -43,7 +43,9 @@ async def scout_ui_bridge(pdf_file, mode):
         with open(report_path, "rb") as f:
             file_bytes = f.read()
 
-        return output_dict, result.get("trace", []), file_bytes
+        filename = f"scout_{company}.pdf"
+
+        return output_dict, result.get("trace", []), (file_bytes, filename)
     except Exception as e:
         return {"error": f"Workflow failed: {str(e)}"}, [], None
 
