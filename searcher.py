@@ -11,7 +11,7 @@ import logging
 logger = logging.getLogger("Scout.Searcher")
 load_dotenv()
 
-async def researcher_agent(missing_info_list):
+async def researcher_agent(missing_info_list, raw_deck_text=None):
     client = genai.Client(api_key=os.environ.get("GEMINI_KEY"))
     logger.info("🕵️ Researcher Agent is starting work...")
 

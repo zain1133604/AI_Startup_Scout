@@ -20,15 +20,24 @@ async def scout_ui_bridge(pdf_file, mode):
     except Exception as e:
         return {"error": f"Failed to read PDF: {str(e)}"}, []
 
-    # 2. Run the LangGraph Workflow
+
+    # ... (keep extraction code)
     try:
         result = await run_scout_workflow(text, mode)
         
-        # 3. Format output for Gradio
+        # FIX: Explicit conversion to Dictionary
         startup_data = result.get("startup", {})
-        execution_trace = result.get("trace", [])
         
-        return startup_data, execution_trace
+        # If it's a Pydantic model (StartupState), convert it
+        if hasattr(startup_data, "model_dump"):
+            output_dict = startup_data.model_dump()
+        elif hasattr(startup_data, "__dict__"):
+            output_dict = startup_data.__dict__
+        else:
+            output_dict = startup_data
+
+        execution_trace = result.get("trace", [])
+        return output_dict, execution_trace
     except Exception as e:
         return {"error": f"Workflow failed: {str(e)}"}, []
 

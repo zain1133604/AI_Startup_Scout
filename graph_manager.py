@@ -34,10 +34,17 @@ async def summarizer_node(state: ScoutState) -> Dict[str, Any]:
     logger.info("Node: Summarizer | Analyzing pitch deck...")
     summary = await sumarizer(state["raw_deck_text"])
     
-    # Update the local object
     startup_obj = state["startup"]
-    startup_obj.manager_notes = summary or "" # Fallback to empty string
+    startup_obj.manager_notes = summary or ""
     
+    # NEW: Try to extract the name immediately so the Researcher doesn't have to guess
+    # Simple logic: Look for "Company Name: [Name]" in the summary
+    import re
+    name_match = re.search(r"Company Name:\s*([^\n]+)", summary, re.IGNORECASE)
+    if name_match:
+        startup_obj.company_name = name_match.group(1).strip()
+        logger.info(f"🎯 Summarizer identified company: {startup_obj.company_name}")
+
     trace_entry = {
         "node": "summarizer",
         "agent": "Summarizer",
@@ -45,7 +52,6 @@ async def summarizer_node(state: ScoutState) -> Dict[str, Any]:
         "status": "Success",
         "timestamp": datetime.now().strftime("%H:%M:%S")
     }
-    # 🔥 ONLY return the keys you changed
     return {"startup": startup_obj, "trace": [trace_entry]}
 
 async def primary_research_node(state: ScoutState) -> Dict[str, Any]:
