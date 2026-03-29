@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Dict, Any, TypedDict, Literal, List, Annotated
 import re
 import os
-
+import asyncio
 from google import genai
 from langgraph.graph import StateGraph, END
 
@@ -62,10 +62,19 @@ def smart_extract_from_raw(raw_text: str):
     return candidates[0] if candidates else None
 
 # --- NODE: COMPANY LOCK ---
+
+
 async def company_lock_node(state: ScoutState) -> ScoutState:
     client = genai.Client(api_key=os.environ.get("GEMINI_KEY"))
     prompt = f"Based on the manager notes:\n{state['startup'].manager_notes}\nReturn ONLY the company name."
-    response = await client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+
+    # Wrap the sync call in a thread so we can 'await' it safely
+    loop = asyncio.get_event_loop()
+    response = await loop.run_in_executor(
+        None,
+        lambda: client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+    )
+
     state["startup"].company_name = response.text.strip() or "UNKNOWN"
     return state
 
