@@ -11,7 +11,7 @@ import logging
 logger = logging.getLogger("Scout.Searcher")
 load_dotenv()
 
-async def researcher_agent(missing_info_list, raw_deck_text=None):
+async def researcher_agent(missing_info_list, raw_deck_text=None, confirmed_company_name=None):
     client = genai.Client(api_key=os.environ.get("GEMINI_KEY"))
     logger.info("🕵️ Researcher Agent is starting work...")
 
@@ -46,7 +46,12 @@ async def researcher_agent(missing_info_list, raw_deck_text=None):
     # Note: I added a instruction to find the name FIRST since we removed the separate ID call.
 # We remove the separate id_check call and let the prompt handle it.
     full_prompt = f"""
-    You are a Senior Investment Researcher. Your job has TWO phases.
+    You are a Senior Investment Researcher.
+
+✅ CONFIRMED TARGET COMPANY: "{confirmed_company_name}"
+⚠️ This name is LOCKED. Do not change it. Research only this company.
+- If web results describe a tool, language, or product with the same name, DISCARD them.
+- Always append "startup" to searches: "{confirmed_company_name} startup funding 2025"
 
     === PHASE 1: RESEARCH & NARRATIVE ===
 
@@ -171,14 +176,13 @@ SELF-CHECK before finishing:
                         continue
 
     # --- 4. STATE ASSEMBLY ---
-    found_name = data.get("company_name", "Unknown") if data else "Unknown"
-    
+    found_name = confirmed_company_name or data.get("company_name", "Unknown") if data else "Unknown"
+
     state = StartupState(
-        company_name=found_name,
+        company_name=found_name,  # ← now uses locked name
         industry=data.get("industry", "Identified in Dossier") if data else "Identified in Dossier",
         manager_notes=content
     )
-
     if data:
         try:
             # Explicitly map lists if they exist in the LLM's JSON
