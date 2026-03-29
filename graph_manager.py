@@ -125,16 +125,25 @@ async def summarizer_node(state: ScoutState) -> ScoutState:
 async def primary_research_node(state: ScoutState) -> ScoutState:
     retries = state["retry_stats"].get("researcher", 0)
     if retries > 0:
-        logger.info(f"⏳ Research retry backoff (Attempt {retries + 1})")
         await asyncio.sleep(2)
-    
+
+    # Save the confirmed name BEFORE researcher overwrites it
+    confirmed_name = state["startup"].company_name
+
     try:
-        state["startup"] = await researcher_agent(state["startup"].manager_notes)
+        result = await researcher_agent(
+            state["startup"].manager_notes,
+            confirmed_company_name=confirmed_name  # lock the name
+        )
+        # Only accept researcher's name if ours is still Pending
+        if confirmed_name and confirmed_name != "Pending":
+            result.company_name = confirmed_name  # restore confirmed name
+        state["startup"] = result
         logger.info(f"✅ Research complete: {state['startup'].company_name}")
     except Exception as e:
         logger.error(f"Researcher failed: {e}")
         state["retry_stats"]["researcher"] = retries + 1
-    
+
     state["trace"].append({
         "node": "researcher",
         "status": "completed",

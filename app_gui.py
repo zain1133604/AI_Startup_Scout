@@ -3,41 +3,23 @@ import asyncio
 from graph_manager import run_scout_workflow
 import os
 from PyPDF2 import PdfReader
-
+from textextractor import text_extractor
+# app_gui.py — replace the PDF reading block with this:
 async def scout_ui_bridge(pdf_file, mode):
     if not pdf_file:
         return {"error": "No file uploaded"}, []
-
-    # 1. Extract Text from PDF (Properly)
     try:
-        # Use the name attribute to get the file path
-        reader = PdfReader(pdf_file.name)
-        text = ""
-        for page in reader.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text + "\n"
+        text = await text_extractor(pdf_file.name)  # Use LlamaParse, same as API
+        if not text:
+            return {"error": "PDF extraction failed"}, []
     except Exception as e:
-        return {"error": f"Failed to read PDF: {str(e)}"}, []
-
-
-    # ... (keep extraction code)
+        return {"error": f"Extraction failed: {str(e)}"}, []
+    
     try:
         result = await run_scout_workflow(text, mode)
-        
-        # FIX: Explicit conversion to Dictionary
         startup_data = result.get("startup", {})
-        
-        # If it's a Pydantic model (StartupState), convert it
-        if hasattr(startup_data, "model_dump"):
-            output_dict = startup_data.model_dump()
-        elif hasattr(startup_data, "__dict__"):
-            output_dict = startup_data.__dict__
-        else:
-            output_dict = startup_data
-
-        execution_trace = result.get("trace", [])
-        return output_dict, execution_trace
+        output_dict = startup_data.model_dump() if hasattr(startup_data, "model_dump") else startup_data
+        return output_dict, result.get("trace", [])
     except Exception as e:
         return {"error": f"Workflow failed: {str(e)}"}, []
 
