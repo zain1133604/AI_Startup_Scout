@@ -27,7 +27,9 @@ async def scout_ui_bridge(pdf_file, mode):
         report_path = None
         try:
             company = output_dict.get("company_name", "report").replace(" ", "_")
-            report_path = f"/tmp/scout_{company}.pdf"
+            report_dir = "reports"
+            os.makedirs(report_dir, exist_ok=True)
+            report_path = os.path.join(report_dir,f"scout_{company}.pdf")
             generate_report(startup_data, report_path)
             logger.info(f"✅ PDF generated at {report_path}")
             # Verify it actually exists
@@ -37,8 +39,8 @@ async def scout_ui_bridge(pdf_file, mode):
         except Exception as e:
             logger.error(f"❌ PDF generation failed: {e}")
             report_path = None
-
-        return output_dict, result.get("trace", []), report_path
+        logger.info(f"📁 Returning report path: {report_path}")
+        return output_dict, result.get("trace", []), [report_path]
     except Exception as e:
         return {"error": f"Workflow failed: {str(e)}"}, [], None
 
@@ -89,5 +91,5 @@ if __name__ == "__main__":
         server_name="0.0.0.0",
         server_port=int(os.environ.get("PORT", 7860)),
         theme=gr.themes.Soft(primary_hue="blue", secondary_hue="slate"),
-        allowed_paths=["/tmp"]  # ← THIS is the key fix — allows Gradio to serve /tmp files
+        allowed_paths=["reports"]  # ← THIS is the key fix — allows Gradio to serve /tmp files
     )
