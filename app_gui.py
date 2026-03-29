@@ -40,19 +40,14 @@ async def scout_ui_bridge(pdf_file, mode):
             logger.error(f"❌ PDF generation failed: {e}")
             report_path = None
         logger.info(f"📁 Returning report path: {report_path}")
-        with open(report_path, "rb") as f:
-            file_bytes = f.read()
+
 
         filename = f"scout_{company}.pdf"
 
         return (
             output_dict,
             result.get("trace", []),
-            gr.DownloadButton.update(
-                value=file_bytes,
-                filename=filename,
-                visible=True
-            )
+            report_path   # ✅ just return path, NOT bytes
         )
     except Exception as e:
         return {"error": f"Workflow failed: {str(e)}"}, [], None
@@ -70,9 +65,9 @@ with gr.Blocks(
             file_input = gr.File(label="Upload Pitch Deck (PDF)", file_types=[".pdf"])
             mode_input = gr.Dropdown(choices=["normal", "hard"], label="Analysis Rigor", value="normal")
             run_btn = gr.Button("🚀 Dispatch Scout Squad", variant="primary")
-            report_file = gr.DownloadButton(
+            report_file = gr.File(
                 label="📄 Download PDF Report",
-                visible=False
+                file_count="single"
             )
 
             gr.Markdown("""
