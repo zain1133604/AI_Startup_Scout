@@ -35,7 +35,7 @@ allowing faster and more consistent investment screening.
         │
         ▼
 ┌──────────────────────────────────────┐
-│   EXTRACTION LAYER  (Text Extractor) │  Parses PDF using LlamaParse —
+│   INGESTION LAYER  (Text Extractor) │  Parses PDF using LlamaParse —
 │          LlamaParse                  │  converts slides to clean markdown
 └────────────────┬─────────────────────┘
                  │
