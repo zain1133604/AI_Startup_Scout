@@ -75,9 +75,9 @@ with gr.Blocks(
 
         with gr.Column(scale=2):
             with gr.Tabs():
-                with gr.TabItem("📊 Final Verdict"):
+                with gr.TabItem("Final Verdict"):
                     output_json = gr.JSON(label="Detailed Analysis Results")
-                with gr.TabItem("🕵️ Execution Trace"):
+                with gr.TabItem("Execution Trace"):
                     trace_display = gr.JSON(label="Agent Timeline / Logs")
 
     run_btn.click(
