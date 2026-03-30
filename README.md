@@ -1,7 +1,7 @@
 # 🛡️ The Startup Scout
 ### Autonomous Multi-Agent VC Due Diligence Platform
 
-> Upload a pitch deck. Get a full investment dossier in minutes — founder profiles, funding history, competitor analysis, community sentiment, burn rate, and a scored verdict. No analysts required.
+> Upload a pitch deck. Get a full investment dossier in minutes — founder profiles, funding history, competitor analysis, community sentiment, burn rate, and a scored verdict. Reduces manual analyst effort in early-stage due diligence.
 
 ---
 
