@@ -27,6 +27,13 @@ allowing faster and more consistent investment screening.
 
 ---
 
+## RESULT PDF LINK
+
+---
+https://github.com/zain1133604/AI_Startup_Scout/blob/main/scout_ARTISAN.pdf
+
+---
+
 ## Agent Pipeline
 
 ---
