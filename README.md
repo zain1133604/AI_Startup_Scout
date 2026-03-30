@@ -15,7 +15,7 @@ It doesn't summarize the deck. It goes beyond it — hitting live web sources, j
 
 ## Why This Matters
 
---
+---
 
 Early-stage due diligence is:
 - Time-consuming
