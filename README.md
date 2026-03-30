@@ -15,8 +15,6 @@ It doesn't summarize the deck. It goes beyond it — hitting live web sources, j
 
 ## Why This Matters
 
----
-
 Early-stage due diligence is:
 - Time-consuming
 - Fragmented across tools
@@ -29,7 +27,6 @@ allowing faster and more consistent investment screening.
 
 ## 📄 Sample Output
 
----
 A real generated investment dossier:
 
 https://github.com/zain1133604/AI_Startup_Scout/blob/main/scout_ARTISAN.pdf
