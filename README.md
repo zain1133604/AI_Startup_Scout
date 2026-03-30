@@ -15,6 +15,8 @@ It doesn't summarize the deck. It goes beyond it — hitting live web sources, j
 
 ## Why This Matters
 
+--
+
 Early-stage due diligence is:
 - Time-consuming
 - Fragmented across tools
@@ -27,38 +29,45 @@ allowing faster and more consistent investment screening.
 
 ## Agent Pipeline
 
+---
 ```
 📄 Pitch Deck (PDF)
         │
         ▼
-┌─────────────────┐
-│   SUMMARIZER    │  Extracts company name, founders, ask, burn rate,
-│   Gemini Flash  │  moat, and missing data gaps from the deck
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│   RESEARCHER    │  Live web research via Tavily — funding rounds,
-│   Gemini Flash  │  ARR, headcount, investors, Reddit sentiment,
-│   + Tavily      │  hiring pulse, competitor matrix
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│    ANALYST      │  Calculates burn rate, runway, valuation multiples,
-│   Llama 3.3 70B │  investment score across 5 scoring pillars
-│   (Groq)        │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│     CRITIC      │  Devil's advocate audit — red flags, platform risk,
-│   Llama 3.3 70B │  churn signals, moat reality check, final verdict
-│   (Groq)        │
-└────────┬────────┘
-         │
-         ▼
-📊 Investment Dossier + PDF Report
+┌──────────────────────────────────────┐
+│   EXTRACTION LAYER  (Text Extractor) │  Parses PDF using LlamaParse —
+│          LlamaParse                  │  converts slides to clean markdown
+└────────────────┬─────────────────────┘
+                 │
+                 ▼
+┌──────────────────────────────────────┐
+│   EXTRACTION LAYER  (Summarizer)     │  Identifies company name, founders,
+│        Gemini 2.5 Flash Lite         │  funding ask, burn rate, and moat
+└────────────────┬─────────────────────┘
+                 │
+                 ▼
+┌──────────────────────────────────────┐
+│   ENRICHMENT LAYER  (Researcher)     │  Live web research — funding rounds,
+│   Gemini 2.5 Flash Lite + Tavily     │  ARR, headcount, investors, Reddit
+│                                      │  sentiment, hiring pulse, competitors
+└────────────────┬─────────────────────┘
+                 │
+                 ▼
+┌──────────────────────────────────────┐
+│   QUANTITATIVE LAYER  (Analyst)      │  Calculates burn rate, runway,
+│      Llama 3.3 70B via Groq          │  valuation multiples, investment
+│                                      │  score across 5 scoring pillars
+└────────────────┬─────────────────────┘
+                 │
+                 ▼
+┌──────────────────────────────────────┐
+│   ADVERSARIAL LAYER  (Critic)        │  Devil's advocate audit — red flags,
+│      Llama 3.3 70B via Groq          │  platform risk, churn signals,
+│                                      │  moat reality check, final verdict
+└────────────────┬─────────────────────┘
+                 │
+                 ▼
+     📊 Investment Dossier + PDF Report
 ```
 
 ---
