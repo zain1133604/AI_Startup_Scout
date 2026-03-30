@@ -25,7 +25,7 @@ async def scout_ui_bridge(pdf_file, mode):
         output_dict = startup_data.model_dump() if hasattr(startup_data, "model_dump") else startup_data
 
         # Generate PDF report
-        report_path = None
+        download_url = None
         try:
             company = output_dict.get("company_name", "report").replace(" ", "_")
             gradio_tmp = "/tmp/gradio"
@@ -33,17 +33,20 @@ async def scout_ui_bridge(pdf_file, mode):
             report_path = os.path.join(gradio_tmp, f"scout_{company}.pdf")
             generate_report(startup_data, report_path)
             logger.info(f"✅ PDF generated at {report_path}")
-            if not os.path.exists(report_path):
-                logger.error("❌ PDF file not found after generation!")
-                report_path = None
+            # Return FastAPI download URL instead of file path
+            download_url = f"/download/scout_{company}.pdf"
         except Exception as e:
             logger.error(f"❌ PDF generation failed: {e}")
-            report_path = None
+            download_url = None
 
-        return output_dict, result.get("trace", []), report_path
+        # Inject download link into output dict so user can click it
+        if download_url:
+            output_dict["📄 download_report"] = download_url
+
+        return output_dict, result.get("trace", [])
 
     except Exception as e:
-        return {"error": f"Workflow failed: {str(e)}"}, [], None
+        return {"error": f"Workflow failed: {str(e)}"}, []
 
 
 # --- 🎨 THE UI DESIGN ---
@@ -59,7 +62,6 @@ with gr.Blocks(
             file_input = gr.File(label="Upload Pitch Deck (PDF)", file_types=[".pdf"])
             mode_input = gr.Dropdown(choices=["normal", "hard"], label="Analysis Rigor", value="normal")
             run_btn = gr.Button("🚀 Dispatch Scout Squad", variant="primary")
-            report_file = gr.File(label="📄 Download PDF Report")
 
             gr.Markdown("""
             **How it works:**
@@ -79,7 +81,7 @@ with gr.Blocks(
     run_btn.click(
         fn=scout_ui_bridge,
         inputs=[file_input, mode_input],
-        outputs=[output_json, trace_display, report_file],
+        outputs=[output_json, trace_display],
         api_name=False
     )
 
@@ -88,5 +90,4 @@ if __name__ == "__main__":
         server_name="0.0.0.0",
         server_port=int(os.environ.get("PORT", 7860)),
         theme=gr.themes.Soft(primary_hue="blue", secondary_hue="slate"),
-        allowed_paths=["/tmp/gradio"]
     )

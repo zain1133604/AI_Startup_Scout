@@ -1,18 +1,30 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi.responses import FileResponse
 import os
 import shutil
 import uuid
 import logging
-import gradio as gr # <--- Add this
+import gradio as gr
 from textextractor import text_extractor
 from graph_manager import run_scout_workflow
-from app_gui import demo # <--- Add this (make sure app_gui.py is in the same folder)
+from app_gui import demo
 
 logger = logging.getLogger("Scout.Main")
 app = FastAPI(title="The Startup Scout API")
 
+# ── PDF DOWNLOAD ROUTE ──
+@app.get("/download/{filename}")
+async def download_report(filename: str):
+    path = f"/tmp/gradio/{filename}"
+    if os.path.exists(path):
+        return FileResponse(
+            path,
+            media_type="application/pdf",
+            filename=filename
+        )
+    return {"error": "File not found"}
+
 # --- 🚀 MOUNT GRADIO GUI ---
-# This makes the GUI available at your-url.app/gui
 app = gr.mount_gradio_app(app, demo, path="/gui")
 
 @app.get("/")
