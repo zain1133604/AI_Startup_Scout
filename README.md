@@ -13,6 +13,18 @@ It doesn't summarize the deck. It goes beyond it — hitting live web sources, j
 
 ---
 
+## Why This Matters
+
+Early-stage due diligence is:
+- Time-consuming
+- Fragmented across tools
+- Dependent on manual research
+
+Startup Scout compresses this into a single automated pipeline,
+allowing faster and more consistent investment screening.
+
+---
+
 ## Agent Pipeline
 
 ```
