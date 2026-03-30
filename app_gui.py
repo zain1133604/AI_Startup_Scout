@@ -10,14 +10,14 @@ logger = logging.getLogger("Scout.GUI")
 
 async def scout_ui_bridge(pdf_file, mode):
     if not pdf_file:
-        return {"error": "No file uploaded"}, [], None
+        return {"error": "No file uploaded"}, []
 
     try:
         text = await text_extractor(pdf_file.name)
         if not text:
-            return {"error": "PDF extraction failed"}, [], None
+            return {"error": "PDF extraction failed"}, []
     except Exception as e:
-        return {"error": f"Extraction failed: {str(e)}"}, [], None
+        return {"error": f"Extraction failed: {str(e)}"}, []
 
     try:
         result = await run_scout_workflow(text, mode)
@@ -25,7 +25,6 @@ async def scout_ui_bridge(pdf_file, mode):
         output_dict = startup_data.model_dump() if hasattr(startup_data, "model_dump") else startup_data
 
         # Generate PDF report
-        download_url = None
         try:
             company = output_dict.get("company_name", "report").replace(" ", "_")
             gradio_tmp = "/tmp/gradio"
@@ -33,15 +32,18 @@ async def scout_ui_bridge(pdf_file, mode):
             report_path = os.path.join(gradio_tmp, f"scout_{company}.pdf")
             generate_report(startup_data, report_path)
             logger.info(f"✅ PDF generated at {report_path}")
-            # Return FastAPI download URL instead of file path
-            download_url = f"/download/scout_{company}.pdf"
+
+            # Build absolute download URL using Railway domain
+            base_url = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "")
+            if base_url:
+                download_url = f"https://{base_url}/download/scout_{company}.pdf"
+            else:
+                download_url = f"/download/scout_{company}.pdf"
+
+            output_dict["📄 download_report"] = download_url
+
         except Exception as e:
             logger.error(f"❌ PDF generation failed: {e}")
-            download_url = None
-
-        # Inject download link into output dict so user can click it
-        if download_url:
-            output_dict["📄 download_report"] = download_url
 
         return output_dict, result.get("trace", [])
 
