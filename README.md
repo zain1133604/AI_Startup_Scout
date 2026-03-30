@@ -228,7 +228,7 @@ reportlab>=4.0.0
 
 ## How It Was Built
 
-This project was built iteratively over a single session — starting from a basic PDF summarizer and evolving into a full multi-agent pipeline. Key architectural decisions:
+Built iteratively with a focus on modular multi-agent design and reliability. — starting from a basic PDF summarizer and evolving into a full multi-agent pipeline. Key architectural decisions:
 
 - **LangGraph** was chosen over a simple sequential chain to enable conditional retry logic (the researcher retries up to 2× if the company name can't be confirmed)
 - **Pydantic v2** as the state layer means every agent reads from and writes to the same validated schema — no data loss between hops
