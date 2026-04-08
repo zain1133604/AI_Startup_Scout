@@ -268,10 +268,4 @@ Built iteratively with a focus on modular multi-agent design and reliability. â€
 
 ---
 
-## License
-
-MIT License â€” use freely, attribute if you publish.
-
----
-
 *Built with LangGraph, Gemini, Groq, Tavily, and too many deploy logs.*
