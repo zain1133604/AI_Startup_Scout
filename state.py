@@ -107,10 +107,11 @@ class StartupState(BaseModel):
         if isinstance(v, list):
             result = []
             for item in v:
-                if isinstance(item, str):
+                if isinstance(item, dict):
+                    # This turns the dict into a Founder object automatically
+                    result.append(Founder(**item))
+                elif isinstance(item, str):
                     result.append(Founder(name=item))
-                elif isinstance(item, dict):
-                    result.append(Founder(**{k: val for k, val in item.items() if k in Founder.model_fields}))
                 else:
                     result.append(item)
             return result
@@ -122,10 +123,11 @@ class StartupState(BaseModel):
         if isinstance(v, list):
             result = []
             for item in v:
-                if isinstance(item, str):
-                    result.append(Competitor(name=item, description="N/A", threat_level="Medium"))
-                elif isinstance(item, dict):
-                    result.append(Competitor(**{k: val for k, val in item.items() if k in Competitor.model_fields}))
+                if isinstance(item, dict):
+                    # This turns the dict into a Competitor object automatically
+                    result.append(Competitor(**item))
+                elif isinstance(item, str):
+                    result.append(Competitor(name=item))
                 else:
                     result.append(item)
             return result
