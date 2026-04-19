@@ -43,7 +43,7 @@ async def scout_ui_bridge(pdf_file, mode):
             output_dict["📄 download_report"] = download_url
 
         except Exception as e:
-            logger.error(f"❌ PDF generation failed: {e}")
+            logger.error(f"PDF generation failed: {e}")
 
         return output_dict, result.get("trace", [])
 
