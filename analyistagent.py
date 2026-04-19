@@ -1,3 +1,29 @@
+# MODULE: Analyst Agent - The Financial & Strategic Auditor
+# ---------------------------------------------------------
+# PURPOSE:
+# This agent serves as the 'Quantitative Brain' of the Startup Scout. It performs 
+# three distinct roles in the pipeline:
+
+# 1. DATA EXTRACTION & GAP FILLING: 
+#    Uses Llama-3 (Groq) to scan the 'Manager Notes' for missed financial signals 
+#    (Headcount, Founder Pedigree, Revenue) without overwriting existing data.
+
+# 2. HEURISTIC SCORING ENGINE:
+#    Executes proprietary VC logic to calculate:
+#    - Monthly Burn & Runway: Adjusted by hiring status and 'vibe' metrics.
+#    - Valuation Adjustment: Corrects AI hallucinations using revenue multiples 
+#      (15x ARR) and funding dilution benchmarks.
+#    - Investment Score: A weighted 100-point scale based on Finance, Traction, Team, and Moat.
+
+# 3. EXECUTIVE SUMMARIZATION:
+#    Generates a high-level 'Analyst Verdict' markdown report for the end-user 
+#    and downstream Critic agents.
+
+# TECH STACK: 
+# - LLM: Llama-3.3-70b-versatile (via Groq) for low-latency reasoning.
+# - Logic: Pydantic-validated state updates with retry-on-failure logic.
+
+
 from groq import AsyncGroq
 import json
 import os

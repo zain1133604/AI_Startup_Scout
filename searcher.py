@@ -1,3 +1,6 @@
+#👨‍🔧👨‍🔧👨‍🔧 this is our searcher.py  or we can say our first agent funciton. it is tool-use + reflection pattern function. it use tools like web_search_Tool and hiring pulse tool. it uses these tools to search like how is company hiring, and people  sentiment about this company on the reddit. and other finicial values and seed rounds. 
+
+
 from google import genai
 from researchertools import web_search_tool, hiring_pulse_tool
 from dotenv import load_dotenv
@@ -44,14 +47,14 @@ async def researcher_agent(missing_info_list, raw_deck_text=None, confirmed_comp
 
     # --- 2. THE PROMPT ---
     # Note: I added a instruction to find the name FIRST since we removed the separate ID call.
-# We remove the separate id_check call and let the prompt handle it.
+    # We remove the separate id_check call and let the prompt handle it.
     full_prompt = f"""
     You are a Senior Investment Researcher.
 
-✅ CONFIRMED TARGET COMPANY: "{confirmed_company_name}"
-⚠️ This name is LOCKED. Do not change it. Research only this company.
-- If web results describe a tool, language, or product with the same name, DISCARD them.
-- Always append "startup" to searches: "{confirmed_company_name} startup funding 2025"
+    ✅ CONFIRMED TARGET COMPANY: "{confirmed_company_name}"
+    ⚠️ This name is LOCKED. Do not change it. Research only this company.
+    - If web results describe a tool, language, or product with the same name, DISCARD them.
+    - Always append "startup" to searches: "{confirmed_company_name} startup funding 2025"
 
     === PHASE 1: RESEARCH & NARRATIVE ===
 
@@ -129,14 +132,14 @@ async def researcher_agent(missing_info_list, raw_deck_text=None, confirmed_comp
     }}
     ```
 
-SELF-CHECK before finishing:
-- Did I put 0.0 anywhere? If yes, go back and check Phase 1 — was it actually mentioned?
-- Are founders/competitors arrays populated if I found them in Phase 1?
-- Is open_roles an actual count from the hiring tool?
-- founders array MUST be populated. Even if only partially known, include them.
-- If a name appears anywhere in Phase 1 as a founder/CEO/author of company blog posts, include them.
-- "Jaspar Carmichael-Jack" writing the company blog = likely founder. Include with role "Unknown" if unsure.
-"""
+    SELF-CHECK before finishing:
+    - Did I put 0.0 anywhere? If yes, go back and check Phase 1 — was it actually mentioned?
+    - Are founders/competitors arrays populated if I found them in Phase 1?
+    - Is open_roles an actual count from the hiring tool?
+    - founders array MUST be populated. Even if only partially known, include them.
+    - If a name appears anywhere in Phase 1 as a founder/CEO/author of company blog posts, include them.
+    - "Jaspar Carmichael-Jack" writing the company blog = likely founder. Include with role "Unknown" if unsure.
+    """
 
     # --- 3. REFLECTION LOOP ---
     content = ""
@@ -187,6 +190,7 @@ SELF-CHECK before finishing:
                         continue
 
     # --- 4. STATE ASSEMBLY ---
+    # 👨‍🔧 This is the final "Assembly Line" of the Researcher Agent. Now that Gemini has finished its internet research and produced a JSON report, this code’s job is to pack all that information into the StartupState object so the next agent (the Analyst) can use it.
     found_name = confirmed_company_name or data.get("company_name", "Unknown") if data else "Unknown"
 
     state = StartupState(

@@ -1,3 +1,4 @@
+#👨‍🔧 we are importing net_asyncio because when we are gonna deploy our code at the cloud platforms. these platforms already running async function. so with nest_asyncio we can nest them. we don't do this it can cause RunTimeERROR: event loop is already running.
 import nest_asyncio
 from llama_parse import LlamaParse
 from dotenv import load_dotenv
@@ -15,7 +16,7 @@ async def text_extractor(file_path : str):
     llamaparse_key = os.environ.get("LLAMA_PARSE_KEY")
     parser = LlamaParse(
         api_key=llamaparse_key, 
-        result_type="markdown",
+        result_type="markdown", # we are ruturning markdown here. cause it will return result with markdowns like #, **, |, -. so it will be easy for our summmarizer to understand. if we don't use this it will return raw text. Note: we can also return Json.
         verbose=True  # This will show you the progress "dots"
     )
 
