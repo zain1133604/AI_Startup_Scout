@@ -64,8 +64,8 @@ https://web-production-a42e1.up.railway.app/gui/?__theme=dark
                  │
                  ▼
 ┌──────────────────────────────────────┐
-│   QUANTITATIVE LAYER  (Analyst)      │  Analyst agent with reflection loop and hybrid anlaysis(LLM + python) Calculates burn rate, runway,
-│      Llama 3.3 70B via Groq          │  valuation multiples, investment
+│   QUANTITATIVE LAYER  (Analyst)      │  Analyst agent with reflection loop and hybrid anlaysis(LLM + python)  
+│      Llama 3.3 70B via Groq          │  valuation multiples, investment , runway, Calculates burn rate 
 │                                      │  score across 5 scoring pillars
 └────────────────┬─────────────────────┘
                  │
