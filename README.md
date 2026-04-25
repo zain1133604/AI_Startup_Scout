@@ -57,21 +57,21 @@ https://web-production-a42e1.up.railway.app/gui/?__theme=dark
                  │
                  ▼
 ┌──────────────────────────────────────┐
-│   ENRICHMENT LAYER  (Researcher)     │  Researcher Agent with (reflection loop + tool use)Live web research — funding rounds,
+│   ENRICHMENT LAYER  (Researcher)     │  Researcher Agent with (reflection loop with validation layer + tool use)Live web research — funding rounds,
 │   Gemini 2.5 Flash Lite + Tavily     │  ARR, headcount, investors, Reddit
 │                                      │  sentiment, hiring pulse, competitors
 └────────────────┬─────────────────────┘
                  │
                  ▼
 ┌──────────────────────────────────────┐
-│   QUANTITATIVE LAYER  (Analyst)      │  Calculates burn rate, runway,
+│   QUANTITATIVE LAYER  (Analyst)      │  Analyst agent with reflection loop and hybrid anlaysis(LLM + python) Calculates burn rate, runway,
 │      Llama 3.3 70B via Groq          │  valuation multiples, investment
 │                                      │  score across 5 scoring pillars
 └────────────────┬─────────────────────┘
                  │
                  ▼
 ┌──────────────────────────────────────┐
-│   ADVERSARIAL LAYER  (Critic)        │  Devil's advocate audit — red flags,
+│   ADVERSARIAL LAYER  (Critic)        │  Devil's advocate audit agent— red flags,
 │      Llama 3.3 70B via Groq          │  platform risk, churn signals,
 │                                      │  moat reality check, final verdict
 └────────────────┬─────────────────────┘
