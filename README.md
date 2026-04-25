@@ -57,7 +57,7 @@ https://web-production-a42e1.up.railway.app/gui/?__theme=dark
                  │
                  ▼
 ┌──────────────────────────────────────┐
-│   ENRICHMENT LAYER  (Researcher)     │  Live web research — funding rounds,
+│   ENRICHMENT LAYER  (Researcher)     │  Researcher Agent with (reflection loop + tool use)Live web research — funding rounds,
 │   Gemini 2.5 Flash Lite + Tavily     │  ARR, headcount, investors, Reddit
 │                                      │  sentiment, hiring pulse, competitors
 └────────────────┬─────────────────────┘
